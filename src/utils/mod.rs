@@ -1,5 +1,4 @@
 /// Utility functions and helpers
-
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Generate a unique ID based on timestamp and random component
@@ -8,7 +7,7 @@ pub fn generate_id(prefix: &str) -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_millis();
-    
+
     let random: u32 = rand::random();
     format!("{}-{}-{:x}", prefix, timestamp, random)
 }
@@ -96,7 +95,7 @@ mod tests {
     #[test]
     fn test_format_duration() {
         use std::time::Duration;
-        
+
         assert_eq!(format_duration(Duration::from_secs(30)), "30s");
         assert_eq!(format_duration(Duration::from_secs(90)), "1m30s");
         assert_eq!(format_duration(Duration::from_secs(3661)), "1h1m1s");
@@ -114,7 +113,7 @@ mod tests {
     fn test_generate_id() {
         let id1 = generate_id("test");
         let id2 = generate_id("test");
-        
+
         assert!(id1.starts_with("test-"));
         assert!(id2.starts_with("test-"));
         assert_ne!(id1, id2); // Should be unique

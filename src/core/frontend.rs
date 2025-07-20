@@ -1,5 +1,4 @@
 /// Frontend connection management
-
 use crate::core::Frontend;
 use std::collections::HashMap;
 use std::net::SocketAddr;

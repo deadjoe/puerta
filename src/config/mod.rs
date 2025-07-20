@@ -1,5 +1,4 @@
 /// Configuration management for puerta
-
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -115,24 +114,22 @@ impl Default for Config {
 impl Config {
     /// Load configuration from TOML file
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, ConfigError> {
-        let content = fs::read_to_string(path)
-            .map_err(|e| ConfigError::IoError(e.to_string()))?;
-        
-        let config: Config = toml::from_str(&content)
-            .map_err(|e| ConfigError::ParseError(e.to_string()))?;
-        
+        let content = fs::read_to_string(path).map_err(|e| ConfigError::IoError(e.to_string()))?;
+
+        let config: Config =
+            toml::from_str(&content).map_err(|e| ConfigError::ParseError(e.to_string()))?;
+
         config.validate()?;
         Ok(config)
     }
 
     /// Save configuration to TOML file
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), ConfigError> {
-        let content = toml::to_string_pretty(self)
-            .map_err(|e| ConfigError::SerializeError(e.to_string()))?;
-        
-        fs::write(path, content)
-            .map_err(|e| ConfigError::IoError(e.to_string()))?;
-        
+        let content =
+            toml::to_string_pretty(self).map_err(|e| ConfigError::SerializeError(e.to_string()))?;
+
+        fs::write(path, content).map_err(|e| ConfigError::IoError(e.to_string()))?;
+
         Ok(())
     }
 
@@ -153,32 +150,39 @@ impl Config {
 
         // Validate proxy config
         match &self.proxy {
-            ProxyConfig::MongoDB { mongos_endpoints, .. } => {
+            ProxyConfig::MongoDB {
+                mongos_endpoints, ..
+            } => {
                 if mongos_endpoints.is_empty() {
                     return Err(ConfigError::ValidationError(
                         "mongos_endpoints cannot be empty".to_string(),
                     ));
                 }
-                
+
                 for endpoint in mongos_endpoints {
-                    endpoint.parse::<std::net::SocketAddr>()
-                        .map_err(|_| ConfigError::ValidationError(
-                            format!("Invalid mongos endpoint: {}", endpoint)
-                        ))?;
+                    endpoint.parse::<std::net::SocketAddr>().map_err(|_| {
+                        ConfigError::ValidationError(format!(
+                            "Invalid mongos endpoint: {}",
+                            endpoint
+                        ))
+                    })?;
                 }
             }
-            ProxyConfig::Redis { cluster_nodes, max_redirects, .. } => {
+            ProxyConfig::Redis {
+                cluster_nodes,
+                max_redirects,
+                ..
+            } => {
                 if cluster_nodes.is_empty() {
                     return Err(ConfigError::ValidationError(
                         "cluster_nodes cannot be empty".to_string(),
                     ));
                 }
-                
+
                 for node in cluster_nodes {
-                    node.parse::<std::net::SocketAddr>()
-                        .map_err(|_| ConfigError::ValidationError(
-                            format!("Invalid Redis node: {}", node)
-                        ))?;
+                    node.parse::<std::net::SocketAddr>().map_err(|_| {
+                        ConfigError::ValidationError(format!("Invalid Redis node: {}", node))
+                    })?;
                 }
 
                 if *max_redirects == 0 {
@@ -211,16 +215,22 @@ impl Config {
         // Validate logging config
         match self.logging.level.as_str() {
             "error" | "warn" | "info" | "debug" | "trace" => {}
-            _ => return Err(ConfigError::ValidationError(
-                format!("Invalid log level: {}", self.logging.level)
-            )),
+            _ => {
+                return Err(ConfigError::ValidationError(format!(
+                    "Invalid log level: {}",
+                    self.logging.level
+                )))
+            }
         }
 
         match self.logging.format.as_str() {
             "json" | "text" => {}
-            _ => return Err(ConfigError::ValidationError(
-                format!("Invalid log format: {}", self.logging.format)
-            )),
+            _ => {
+                return Err(ConfigError::ValidationError(format!(
+                    "Invalid log format: {}",
+                    self.logging.format
+                )))
+            }
         }
 
         Ok(())
@@ -254,9 +264,11 @@ impl Config {
                 },
                 ..Default::default()
             },
-            _ => return Err(ConfigError::ValidationError(
-                "Mode must be 'mongodb' or 'redis'".to_string(),
-            )),
+            _ => {
+                return Err(ConfigError::ValidationError(
+                    "Mode must be 'mongodb' or 'redis'".to_string(),
+                ))
+            }
         };
 
         config.save_to_file(path)
@@ -268,13 +280,13 @@ impl Config {
 pub enum ConfigError {
     #[error("IO error: {0}")]
     IoError(String),
-    
+
     #[error("Parse error: {0}")]
     ParseError(String),
-    
+
     #[error("Serialize error: {0}")]
     SerializeError(String),
-    
+
     #[error("Validation error: {0}")]
     ValidationError(String),
 }
@@ -293,11 +305,11 @@ mod tests {
     #[test]
     fn test_config_validation() {
         let mut config = Config::default();
-        
+
         // Test invalid max_connections
         config.server.max_connections = 0;
         assert!(config.validate().is_err());
-        
+
         config.server.max_connections = 1000;
         assert!(config.validate().is_ok());
     }
@@ -314,7 +326,7 @@ mod tests {
     fn test_config_file_operations() {
         let config = Config::default();
         let temp_file = NamedTempFile::new().unwrap();
-        
+
         // Test save and load
         config.save_to_file(temp_file.path()).unwrap();
         let loaded_config = Config::load_from_file(temp_file.path()).unwrap();

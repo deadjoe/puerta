@@ -1,5 +1,4 @@
 /// Load balancing algorithms for MongoDB mongos instances
-
 use crate::core::Backend;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -27,7 +26,7 @@ impl LoadBalancingAlgorithm for RoundRobin {
         if backends.is_empty() {
             return None;
         }
-        
+
         let index = self.counter.fetch_add(1, Ordering::Relaxed) % backends.len();
         Some(index)
     }
@@ -63,7 +62,7 @@ impl LoadBalancingAlgorithm for WeightedRoundRobin {
         // Use weighted selection
         let position = self.counter.fetch_add(1, Ordering::Relaxed) % total_weight;
         let mut current_weight = 0;
-        
+
         for (index, backend) in backends.iter().enumerate() {
             current_weight += backend.weight;
             if position < current_weight {

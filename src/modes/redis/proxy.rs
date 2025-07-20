@@ -1,5 +1,4 @@
 /// Redis Cluster proxy implementation
-
 use super::{RedisCommand, RedisResponse, SlotMapping};
 use crate::core::Backend;
 use crate::modes::RoutingDecision;
@@ -47,7 +46,10 @@ impl RedisClusterProxy {
                         RoutingDecision::Route { backend_id }
                     } else {
                         RoutingDecision::Error {
-                            message: format!("Backend {} for slot {} is unhealthy", backend_id, slot),
+                            message: format!(
+                                "Backend {} for slot {} is unhealthy",
+                                backend_id, slot
+                            ),
                         }
                     }
                 } else {
@@ -102,17 +104,23 @@ impl RedisClusterProxy {
                 // MOVED means the slot has permanently moved
                 // Update our slot mapping
                 self.update_slot_mapping(*slot, new_address.clone()).await;
-                
+
                 // Find backend for the new address
                 if let Some(backend_id) = self.find_backend_by_address(new_address).await {
                     RoutingDecision::Route { backend_id }
                 } else {
                     RoutingDecision::Error {
-                        message: format!("Backend not found for redirected address: {}", new_address),
+                        message: format!(
+                            "Backend not found for redirected address: {}",
+                            new_address
+                        ),
                     }
                 }
             }
-            RedisResponse::Ask { slot: _, new_address } => {
+            RedisResponse::Ask {
+                slot: _,
+                new_address,
+            } => {
                 // ASK is temporary - don't update slot mapping
                 if let Some(backend_id) = self.find_backend_by_address(new_address).await {
                     RoutingDecision::Route { backend_id }
@@ -135,7 +143,12 @@ impl RedisClusterProxy {
             let _slot_mapping = self.slot_mapping.write().await;
             // Update the slot mapping
             // TODO: Implement proper slot mapping update
-            tracing::info!("Slot {} moved to backend {} ({})", slot, backend_id, new_address);
+            tracing::info!(
+                "Slot {} moved to backend {} ({})",
+                slot,
+                backend_id,
+                new_address
+            );
         }
     }
 
@@ -189,7 +202,7 @@ mod tests {
     #[tokio::test]
     async fn test_keyless_command_routing() {
         let proxy = RedisClusterProxy::new(3);
-        
+
         // Add a healthy backend
         let backend = Backend::new_redis(
             "redis-1".to_string(),
@@ -197,7 +210,7 @@ mod tests {
             "node-1".to_string(),
         );
         proxy.add_backend(backend).await;
-        
+
         // Mark backend as healthy
         {
             let mut backends = proxy.backends.write().await;
@@ -226,7 +239,7 @@ mod tests {
     #[tokio::test]
     async fn test_no_healthy_backends() {
         let proxy = RedisClusterProxy::new(3);
-        
+
         let command = RedisCommand {
             command: "PING".to_string(),
             args: vec![],

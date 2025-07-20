@@ -1,5 +1,4 @@
 /// Backend service management
-
 use crate::core::Backend;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -41,11 +40,7 @@ impl BackendManager {
     /// Get all healthy backends
     pub async fn get_healthy_backends(&self) -> Vec<Backend> {
         let backends = self.backends.read().await;
-        backends
-            .values()
-            .filter(|b| b.healthy)
-            .cloned()
-            .collect()
+        backends.values().filter(|b| b.healthy).cloned().collect()
     }
 
     /// Get the backend pool reference

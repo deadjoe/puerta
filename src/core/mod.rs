@@ -1,9 +1,8 @@
 /// Core abstractions shared between MongoDB and Redis modes
-
 pub mod backend;
+pub mod connection;
 pub mod frontend;
 pub mod session;
-pub mod connection;
 
 use std::net::SocketAddr;
 use std::time::SystemTime;

@@ -1,5 +1,4 @@
 /// Session affinity management for MongoDB connections
-
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -121,12 +120,14 @@ impl AffinityManager {
     pub async fn get_statistics(&self) -> AffinityStatistics {
         let sessions = self.sessions.read().await;
         let total_sessions = sessions.len();
-        
+
         let mut backend_counts = HashMap::new();
         let mut total_connections = 0;
 
         for session in sessions.values() {
-            *backend_counts.entry(session.backend_id.clone()).or_insert(0) += 1;
+            *backend_counts
+                .entry(session.backend_id.clone())
+                .or_insert(0) += 1;
             total_connections += session.connection_count;
         }
 

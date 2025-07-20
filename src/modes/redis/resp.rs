@@ -1,6 +1,5 @@
 /// Redis RESP (Redis Serialization Protocol) parsing and generation
-
-use bytes::{Bytes, BytesMut, Buf, BufMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::str;
 
 /// RESP data types
@@ -63,14 +62,14 @@ impl RespParser {
     /// Parse multiple commands from a buffer
     pub fn parse_commands(buf: &mut BytesMut) -> Result<Vec<RespValue>, RespParseError> {
         let mut commands = Vec::new();
-        
+
         while !buf.is_empty() {
             match Self::parse(buf)? {
                 Some(command) => commands.push(command),
                 None => break, // Incomplete data
             }
         }
-        
+
         Ok(commands)
     }
 
@@ -119,7 +118,7 @@ impl RespParser {
             }
 
             let size = size as usize;
-            
+
             // Check if we have enough data for the string + \r\n
             if buf.len() < size + 2 {
                 // Not enough data, put back the size line
@@ -133,7 +132,7 @@ impl RespParser {
             }
 
             let content = buf.split_to(size);
-            
+
             // Consume \r\n
             if buf.len() < 2 || buf[0] != b'\r' || buf[1] != b'\n' {
                 return Err(RespParseError::InvalidFormat(
@@ -249,8 +248,10 @@ impl RespEncoder {
 
     /// Create a Redis command from command name and arguments
     pub fn create_command(command: &str, args: &[&str]) -> RespValue {
-        let mut elements = vec![RespValue::BulkString(Some(Bytes::from(command.to_string())))];
-        
+        let mut elements = vec![RespValue::BulkString(Some(Bytes::from(
+            command.to_string(),
+        )))];
+
         for arg in args {
             elements.push(RespValue::BulkString(Some(Bytes::from(arg.to_string()))));
         }
@@ -303,11 +304,17 @@ mod tests {
     fn test_parse_array() {
         let mut buf = BytesMut::from("*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n");
         let result = RespParser::parse(&mut buf).unwrap().unwrap();
-        
+
         if let RespValue::Array(Some(elements)) = result {
             assert_eq!(elements.len(), 2);
-            assert_eq!(elements[0], RespValue::BulkString(Some(Bytes::from("hello"))));
-            assert_eq!(elements[1], RespValue::BulkString(Some(Bytes::from("world"))));
+            assert_eq!(
+                elements[0],
+                RespValue::BulkString(Some(Bytes::from("hello")))
+            );
+            assert_eq!(
+                elements[1],
+                RespValue::BulkString(Some(Bytes::from("world")))
+            );
         } else {
             panic!("Expected array");
         }
