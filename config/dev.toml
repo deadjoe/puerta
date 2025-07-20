@@ -1,0 +1,31 @@
+# Development configuration for puerta
+# This configuration is optimized for local development and testing
+
+[server]
+listen_addr = "127.0.0.1:8080"
+max_connections = 100
+connection_timeout_sec = 30
+worker_threads = 2
+
+[proxy]
+mode = "mongodb"
+# Local MongoDB mongos instances for development
+mongos_endpoints = [
+    "127.0.0.1:27017",
+    "127.0.0.1:27018"
+]
+session_affinity = true
+session_timeout_sec = 300
+
+[health]
+# More frequent health checks for development
+interval_sec = 5
+timeout_sec = 2
+failure_threshold = 2
+success_threshold = 1
+
+[logging]
+level = "debug"
+format = "text"
+stdout = true
+# No file logging for development

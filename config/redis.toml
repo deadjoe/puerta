@@ -1,0 +1,43 @@
+# Puerta configuration for Redis Cluster proxy
+# This configuration enables protocol-aware proxy with slot-based routing
+
+[server]
+listen_addr = "0.0.0.0:6379"
+max_connections = 10000
+connection_timeout_sec = 60
+worker_threads = 4  # Optional: defaults to number of CPU cores
+
+[proxy]
+mode = "redis"
+# List of Redis cluster nodes - puerta will discover full cluster topology
+cluster_nodes = [
+    "10.0.1.20:6379",
+    "10.0.1.21:6379",
+    "10.0.1.22:6379",
+    "10.0.1.23:6379",
+    "10.0.1.24:6379",
+    "10.0.1.25:6379"
+]
+# How often to refresh slot mapping from cluster (seconds)
+slot_refresh_interval_sec = 60
+# Maximum number of MOVED/ASK redirects to follow per request
+max_redirects = 3
+# Connection timeout to Redis nodes (milliseconds)
+connection_timeout_ms = 5000
+
+[health]
+# Health check interval in seconds (Redis PING command)
+interval_sec = 5
+# Health check timeout in seconds
+timeout_sec = 3
+# Number of consecutive failures before marking unhealthy
+failure_threshold = 3
+# Number of consecutive successes before marking healthy
+success_threshold = 2
+
+[logging]
+level = "info"
+format = "text"
+stdout = true
+# Optional: log to file
+# file = "/var/log/puerta/puerta.log"
