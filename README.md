@@ -152,9 +152,8 @@ src/
 ├── config/         # Configuration management
 └── utils/          # Common utilities
 
-examples/
-├── pingora/        # Pingora framework source
-└── rcproxy/        # RCProxy reference implementation
+config/             # Configuration file examples
+benches/            # Performance benchmarks
 ```
 
 ### Key Components
