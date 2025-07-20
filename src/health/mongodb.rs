@@ -1,10 +1,9 @@
 /// MongoDB mongos health checker
-
 use super::{HealthChecker, HealthStatus};
 use crate::core::Backend;
 use std::time::Duration;
-use tokio::net::TcpStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
 
 /// MongoDB health checker implementation
 /// Uses ismaster command to check mongos availability and status
@@ -29,7 +28,7 @@ impl MongoDBHealthChecker {
                 // For now, just verify we can connect
                 // TODO: Implement proper MongoDB Wire Protocol health check
                 // Should send ismaster command and verify response
-                
+
                 // Try to write a simple probe
                 if let Err(e) = stream.write_all(b"").await {
                     return HealthStatus::Unhealthy {
@@ -69,7 +68,7 @@ impl MongoDBHealthChecker {
         // 3. Parse response to verify mongos is functioning
         // 4. Check if mongos is primary/secondary in config server context
         // 5. Verify mongos can reach config servers
-        
+
         // For now, fall back to TCP check
         self.tcp_health_check(backend).await
     }
@@ -79,7 +78,7 @@ impl MongoDBHealthChecker {
 impl HealthChecker for MongoDBHealthChecker {
     async fn check_health(&self, backend: &Backend) -> HealthStatus {
         tracing::debug!("Checking MongoDB health for backend: {}", backend.id);
-        
+
         // Use TCP health check for now
         // In production, should use mongodb_ismaster_check
         self.tcp_health_check(backend).await

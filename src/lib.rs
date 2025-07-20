@@ -1,37 +1,36 @@
+pub mod config;
 /// Puerta - High-performance load balancer for MongoDB Sharded Clusters and Redis Clusters
 /// Built on Cloudflare's Pingora framework and RCProxy architecture
-/// 
+///
 /// Puerta supports two distinct operational modes:
 /// 1. MongoDB Mode: Session-aware TCP load balancing across multiple mongos instances using Pingora TCP proxy
 /// 2. Redis Mode: Protocol-aware proxy for Redis Cluster with MOVED/ASK handling using RCProxy
-
 pub mod core;
-pub mod modes;
 pub mod health;
-pub mod config;
+pub mod modes;
 pub mod utils;
 
 use async_trait::async_trait;
+use std::collections::HashMap;
 use std::error::Error;
 use std::sync::Arc;
-use std::collections::HashMap;
-use tokio::sync::RwLock;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::sync::RwLock;
 
 // Pingora framework imports for TCP proxy
+use pingora::apps::ServerApp;
+use pingora_core::connectors::TransportConnector;
+use pingora_core::listeners::Listeners;
+use pingora_core::protocols::Stream;
 use pingora_core::server::configuration::Opt;
 use pingora_core::server::Server;
-use pingora_core::services::listening::Service;
-use pingora_core::listeners::Listeners;
-use pingora_core::upstreams::peer::{BasicPeer, Peer};
-use pingora_core::connectors::TransportConnector;
-use pingora_core::protocols::Stream;
 use pingora_core::server::ShutdownWatch;
-use pingora::apps::ServerApp;
+use pingora_core::services::listening::Service;
+use pingora_core::upstreams::peer::{BasicPeer, Peer};
 use pingora_load_balancing::{health_check, selection::RoundRobin, LoadBalancer};
 
 use crate::modes::mongodb::MongoDBConfig;
-use crate::modes::redis::{RedisConfig, RedisClusterProxy};
+use crate::modes::redis::{RedisClusterProxy, RedisConfig};
 
 /// Main proxy mode enumeration
 #[derive(Debug, Clone)]
@@ -84,12 +83,17 @@ impl PuertaConfig {
 
         // Validate proxy mode specific settings
         match &proxy_mode {
-            ProxyMode::MongoDB { mongos_endpoints, .. } => {
+            ProxyMode::MongoDB {
+                mongos_endpoints, ..
+            } => {
                 if mongos_endpoints.is_empty() {
                     return Err("At least one mongos endpoint is required".to_string());
                 }
             }
-            ProxyMode::Redis { cluster_nodes, slot_refresh_interval_ms } => {
+            ProxyMode::Redis {
+                cluster_nodes,
+                slot_refresh_interval_ms,
+            } => {
                 if cluster_nodes.is_empty() {
                     return Err("At least one Redis cluster node is required".to_string());
                 }
@@ -148,35 +152,54 @@ impl MongoDBTcpProxy {
     }
 
     /// Select backend mongos based on session affinity and load balancing
-    async fn select_backend(&self, client_addr: &str) -> Result<BasicPeer, Box<dyn Error + Send + Sync>> {
+    async fn select_backend(
+        &self,
+        client_addr: &str,
+    ) -> Result<BasicPeer, Box<dyn Error + Send + Sync>> {
         if self.config.session_affinity_enabled {
             // Check existing session affinity
             {
                 let affinity_map = self.session_affinity.read().await;
                 if let Some(backend_addr) = affinity_map.get(client_addr) {
-                    log::info!("Using existing session affinity: {} -> {}", client_addr, backend_addr);
+                    log::info!(
+                        "Using existing session affinity: {} -> {}",
+                        client_addr,
+                        backend_addr
+                    );
                     return Ok(BasicPeer::new(backend_addr));
                 }
             }
 
             // No existing affinity, select new backend and store affinity
-            let backend = self.load_balancer.select(client_addr.as_bytes(), 256)
+            let backend = self
+                .load_balancer
+                .select(client_addr.as_bytes(), 256)
                 .ok_or_else(|| "No healthy mongos backends available")?;
             let backend_addr = backend.addr.to_string();
-            
+
             {
                 let mut affinity_map = self.session_affinity.write().await;
                 affinity_map.insert(client_addr.to_string(), backend_addr.clone());
             }
-            
-            log::info!("Created new session affinity: {} -> {}", client_addr, backend_addr);
+
+            log::info!(
+                "Created new session affinity: {} -> {}",
+                client_addr,
+                backend_addr
+            );
             Ok(BasicPeer::new(&backend_addr))
         } else {
             // Simple load balancing without session affinity
-            let backend = self.load_balancer.select(client_addr.as_bytes(), 256)
+            let backend = self
+                .load_balancer
+                .select(client_addr.as_bytes(), 256)
                 .ok_or_else(|| "No healthy mongos backends available")?;
             let backend_addr = backend.addr.to_string();
-            log::info!("Selected backend without affinity: {} -> {}", client_addr, backend_addr);
+            log::info!(
+                "Selected backend without affinity: {} -> {}",
+                client_addr,
+                backend_addr
+            );
             Ok(BasicPeer::new(&backend_addr))
         }
     }
@@ -192,7 +215,12 @@ impl MongoDBTcpProxy {
     }
 
     /// Bidirectional TCP data forwarding between MongoDB client and mongos
-    async fn forward_tcp_data(&self, mut client_stream: Stream, mut mongos_stream: Stream, client_addr: &str) {
+    async fn forward_tcp_data(
+        &self,
+        mut client_stream: Stream,
+        mut mongos_stream: Stream,
+        client_addr: &str,
+    ) {
         let mut client_buf = [0; 8192];
         let mut mongos_buf = [0; 8192];
         let mut bytes_transferred_to_mongos = 0u64;
@@ -257,7 +285,9 @@ impl MongoDBTcpProxy {
 
         log::info!(
             "Data forwarding completed for client {}: {} bytes to mongos, {} bytes to client",
-            client_addr, bytes_transferred_to_mongos, bytes_transferred_to_client
+            client_addr,
+            bytes_transferred_to_mongos,
+            bytes_transferred_to_client
         );
     }
 }
@@ -270,8 +300,10 @@ impl ServerApp for MongoDBTcpProxy {
         _shutdown: &ShutdownWatch,
     ) -> Option<Stream> {
         // Get client address for session affinity
-        let client_addr = match client_stream.get_socket_digest()
-            .and_then(|digest| digest.peer_addr().cloned()) {
+        let client_addr = match client_stream
+            .get_socket_digest()
+            .and_then(|digest| digest.peer_addr().cloned())
+        {
             Some(addr) => addr.to_string(),
             None => {
                 log::warn!("Could not get client address, using fallback identifier");
@@ -295,16 +327,24 @@ impl ServerApp for MongoDBTcpProxy {
         let mongos_stream = match self.connector.new_stream(&backend_peer).await {
             Ok(stream) => stream,
             Err(e) => {
-                log::error!("Failed to connect to mongos {}: {}", backend_peer.address(), e);
+                log::error!(
+                    "Failed to connect to mongos {}: {}",
+                    backend_peer.address(),
+                    e
+                );
                 self.cleanup_session(&client_addr).await;
                 return None;
             }
         };
 
-        log::info!("Established connection to mongos: {}", backend_peer.address());
+        log::info!(
+            "Established connection to mongos: {}",
+            backend_peer.address()
+        );
 
         // Forward MongoDB Wire Protocol data bidirectionally
-        self.forward_tcp_data(client_stream, mongos_stream, &client_addr).await;
+        self.forward_tcp_data(client_stream, mongos_stream, &client_addr)
+            .await;
 
         // Clean up session affinity
         self.cleanup_session(&client_addr).await;
@@ -321,7 +361,7 @@ pub struct Puerta {
 
 impl Puerta {
     pub fn new(config: PuertaConfig) -> Self {
-        Self { 
+        Self {
             config,
             server: None,
         }
@@ -350,26 +390,23 @@ impl Puerta {
         }
 
         match &self.config.proxy_mode {
-            ProxyMode::MongoDB { .. } => {
-                self.run_mongodb_mode().await
-            }
-            ProxyMode::Redis { .. } => {
-                self.run_redis_mode().await
-            }
+            ProxyMode::MongoDB { .. } => self.run_mongodb_mode().await,
+            ProxyMode::Redis { .. } => self.run_redis_mode().await,
         }
     }
 
     async fn run_mongodb_mode(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
         log::info!("Starting Puerta in MongoDB TCP proxy mode using Pingora framework");
-        
+
         let mut server = self.server.take().unwrap();
         server.bootstrap();
 
         // Extract MongoDB configuration
         let (mongos_endpoints, session_affinity_enabled) = match &self.config.proxy_mode {
-            ProxyMode::MongoDB { mongos_endpoints, session_affinity_enabled } => {
-                (mongos_endpoints.clone(), *session_affinity_enabled)
-            }
+            ProxyMode::MongoDB {
+                mongos_endpoints,
+                session_affinity_enabled,
+            } => (mongos_endpoints.clone(), *session_affinity_enabled),
             _ => unreachable!("run_mongodb_mode called with non-MongoDB config"),
         };
 
@@ -379,25 +416,30 @@ impl Puerta {
             session_affinity_enabled,
             300,
             self.config.health_check_interval_ms / 1000,
-        ).map_err(|e| format!("Invalid MongoDB configuration: {}", e))?;
+        )
+        .map_err(|e| format!("Invalid MongoDB configuration: {}", e))?;
 
         // Create Pingora load balancer with mongos endpoints
-        let mut upstreams = LoadBalancer::try_from_iter(mongos_endpoints.iter().map(|s| s.as_str()))?;
+        let mut upstreams =
+            LoadBalancer::try_from_iter(mongos_endpoints.iter().map(|s| s.as_str()))?;
 
         // Add health check for mongos instances using TCP health check
         let health_checker = health_check::TcpHealthCheck::new();
         upstreams.set_health_check(health_checker);
         upstreams.health_check_frequency = Some(std::time::Duration::from_millis(
-            self.config.health_check_interval_ms
+            self.config.health_check_interval_ms,
         ));
 
         // Create background health check service
-        let background = pingora_core::services::background::background_service("mongodb-health-check", upstreams);
+        let background = pingora_core::services::background::background_service(
+            "mongodb-health-check",
+            upstreams,
+        );
         let load_balancer = background.task();
 
         // Create MongoDB TCP proxy service
         let mongodb_proxy = MongoDBTcpProxy::new(load_balancer, mongodb_config);
-        
+
         // Create TCP listening service for MongoDB Wire Protocol
         let tcp_service = Service::with_listeners(
             "MongoDB TCP Proxy".to_string(),
@@ -409,7 +451,10 @@ impl Puerta {
         server.add_service(tcp_service);
         server.add_service(background);
 
-        log::info!("MongoDB TCP proxy listening on: {}", self.config.listen_addr);
+        log::info!(
+            "MongoDB TCP proxy listening on: {}",
+            self.config.listen_addr
+        );
         log::info!("Proxying to mongos endpoints: {:?}", mongos_endpoints);
 
         // Run the server (consume ownership)
@@ -418,12 +463,13 @@ impl Puerta {
 
     async fn run_redis_mode(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
         log::info!("Starting Puerta in Redis mode using RCProxy architecture");
-        
+
         // Extract Redis configuration
         let (cluster_nodes, slot_refresh_interval_ms) = match &self.config.proxy_mode {
-            ProxyMode::Redis { cluster_nodes, slot_refresh_interval_ms } => {
-                (cluster_nodes.clone(), *slot_refresh_interval_ms)
-            }
+            ProxyMode::Redis {
+                cluster_nodes,
+                slot_refresh_interval_ms,
+            } => (cluster_nodes.clone(), *slot_refresh_interval_ms),
             _ => unreachable!("run_redis_mode called with non-Redis config"),
         };
 
@@ -455,7 +501,8 @@ mod tests {
             },
             1000,
             1000,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(config.listen_addr, "127.0.0.1:8080");
         assert_eq!(config.health_check_interval_ms, 1000);
@@ -493,7 +540,10 @@ mod tests {
         );
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Health check interval must be greater than 0");
+        assert_eq!(
+            result.unwrap_err(),
+            "Health check interval must be greater than 0"
+        );
     }
 
     #[test]
@@ -509,7 +559,10 @@ mod tests {
         );
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Max connections must be greater than 0");
+        assert_eq!(
+            result.unwrap_err(),
+            "Max connections must be greater than 0"
+        );
     }
 
     #[test]
@@ -525,7 +578,10 @@ mod tests {
         );
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "At least one mongos endpoint is required");
+        assert_eq!(
+            result.unwrap_err(),
+            "At least one mongos endpoint is required"
+        );
     }
 
     #[test]
@@ -541,7 +597,10 @@ mod tests {
         );
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "At least one Redis cluster node is required");
+        assert_eq!(
+            result.unwrap_err(),
+            "At least one Redis cluster node is required"
+        );
     }
 
     #[test]
@@ -557,7 +616,10 @@ mod tests {
         );
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Slot refresh interval must be greater than 0");
+        assert_eq!(
+            result.unwrap_err(),
+            "Slot refresh interval must be greater than 0"
+        );
     }
 
     #[test]
@@ -570,7 +632,8 @@ mod tests {
             },
             1000,
             1000,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(config.mode_name(), "Redis");
     }
@@ -585,7 +648,8 @@ mod tests {
             },
             1000,
             1000,
-        ).unwrap();
+        )
+        .unwrap();
 
         let puerta = Puerta::new(config);
         assert!(!puerta.is_initialized());
@@ -602,18 +666,20 @@ mod tests {
             },
             1000,
             1000,
-        ).unwrap();
+        )
+        .unwrap();
 
         let mut puerta = Puerta::new(config);
-        
+
         // This test requires tokio runtime
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let result = rt.block_on(async {
-            puerta.run().await
-        });
+        let result = rt.block_on(async { puerta.run().await });
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Server not initialized. Call initialize() first.");
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Server not initialized. Call initialize() first."
+        );
     }
 
     #[tokio::test]
@@ -621,7 +687,7 @@ mod tests {
         // Create a mock load balancer and config for testing
         let upstreams = LoadBalancer::try_from_iter(["127.0.0.1:27017"].iter()).unwrap();
         let load_balancer = Arc::new(upstreams);
-        
+
         let config = MongoDBConfig {
             mongos_endpoints: vec!["127.0.0.1:27017".to_string()],
             session_affinity_enabled: true,
@@ -630,24 +696,24 @@ mod tests {
         };
 
         let proxy = MongoDBTcpProxy::new(load_balancer, config);
-        
+
         // Initially should have 0 sessions
         assert_eq!(proxy.session_count().await, 0);
-        
+
         // Add a session manually
         {
             let mut sessions = proxy.session_affinity.write().await;
             sessions.insert("127.0.0.1:12345".to_string(), "127.0.0.1:27017".to_string());
         }
-        
+
         assert_eq!(proxy.session_count().await, 1);
     }
 
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_mongodb_tcp_proxy_cleanup_session() {
         let upstreams = LoadBalancer::try_from_iter(["127.0.0.1:27017"].iter()).unwrap();
         let load_balancer = Arc::new(upstreams);
-        
+
         let config = MongoDBConfig {
             mongos_endpoints: vec!["127.0.0.1:27017".to_string()],
             session_affinity_enabled: true,
@@ -657,18 +723,18 @@ mod tests {
 
         let proxy = MongoDBTcpProxy::new(load_balancer, config);
         let client_addr = "127.0.0.1:12345";
-        
+
         // Add a session
         {
             let mut sessions = proxy.session_affinity.write().await;
             sessions.insert(client_addr.to_string(), "127.0.0.1:27017".to_string());
         }
-        
+
         assert_eq!(proxy.session_count().await, 1);
-        
+
         // Clean up the session
         proxy.cleanup_session(client_addr).await;
-        
+
         assert_eq!(proxy.session_count().await, 0);
     }
 
@@ -676,28 +742,29 @@ mod tests {
     async fn test_mongodb_tcp_proxy_cleanup_session_disabled() {
         let upstreams = LoadBalancer::try_from_iter(["127.0.0.1:27017"].iter()).unwrap();
         let load_balancer = Arc::new(upstreams);
-        
+
         let config = MongoDBConfig::new(
             vec!["127.0.0.1:27017".to_string()],
             false, // Disabled
             300,
             10,
-        ).unwrap();
+        )
+        .unwrap();
 
         let proxy = MongoDBTcpProxy::new(load_balancer, config);
         let client_addr = "127.0.0.1:12345";
-        
+
         // Add a session manually (even though affinity is disabled)
         {
             let mut sessions = proxy.session_affinity.write().await;
             sessions.insert(client_addr.to_string(), "127.0.0.1:27017".to_string());
         }
-        
+
         assert_eq!(proxy.session_count().await, 1);
-        
+
         // Cleanup should not remove session when affinity is disabled
         proxy.cleanup_session(client_addr).await;
-        
+
         // Session should still be there since affinity is disabled
         assert_eq!(proxy.session_count().await, 1);
     }
@@ -712,11 +779,12 @@ mod tests {
             },
             1000,
             1000,
-        ).unwrap();
+        )
+        .unwrap();
 
         let mut puerta = Puerta::new(config);
         assert!(!puerta.is_initialized());
-        
+
         let result = puerta.initialize(None);
         assert!(result.is_ok());
         assert!(puerta.is_initialized());

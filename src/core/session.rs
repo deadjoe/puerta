@@ -1,5 +1,4 @@
 /// Session management for connection affinity
-
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -111,7 +110,7 @@ impl SessionManager {
     /// Start background cleanup task
     pub async fn start_cleanup_task(self: Arc<Self>) {
         let mut interval = tokio::time::interval(self.session_timeout / 4);
-        
+
         loop {
             interval.tick().await;
             let cleaned = self.cleanup_expired_sessions().await;

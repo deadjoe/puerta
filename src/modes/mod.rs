@@ -1,5 +1,4 @@
 /// Different operational modes for puerta
-
 pub mod mongodb;
 pub mod redis;
 
@@ -19,5 +18,8 @@ pub enum RoutingDecision {
     /// Return error to client
     Error { message: String },
     /// Redirect client (Redis MOVED/ASK)
-    Redirect { new_address: String, command: String },
+    Redirect {
+        new_address: String,
+        command: String,
+    },
 }

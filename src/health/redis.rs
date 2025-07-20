@@ -1,10 +1,9 @@
 /// Redis cluster node health checker
-
 use super::{HealthChecker, HealthStatus};
 use crate::core::Backend;
 use std::time::Duration;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
-use tokio::io::{AsyncWriteExt, BufReader, AsyncBufReadExt};
 
 /// Redis health checker implementation
 /// Uses PING command and CLUSTER NODES for comprehensive health checking
@@ -37,7 +36,7 @@ impl RedisHealthChecker {
 
         // Send PING command in RESP format
         let ping_command = "*1\r\n$4\r\nPING\r\n";
-        
+
         if let Err(e) = writer.write_all(ping_command.as_bytes()).await {
             return HealthStatus::Unhealthy {
                 reason: format!("Failed to send PING: {}", e),
@@ -79,7 +78,7 @@ impl RedisHealthChecker {
 
         // Send CLUSTER NODES command in RESP format
         let cluster_command = "*2\r\n$7\r\nCLUSTER\r\n$5\r\nNODES\r\n";
-        
+
         if let Err(e) = writer.write_all(cluster_command.as_bytes()).await {
             return HealthStatus::Unhealthy {
                 reason: format!("Failed to send CLUSTER NODES: {}", e),
@@ -122,7 +121,7 @@ impl RedisHealthChecker {
     async fn comprehensive_check(&self, backend: &Backend) -> HealthStatus {
         // First do basic PING check
         let ping_status = self.redis_ping_check(backend).await;
-        
+
         match ping_status {
             HealthStatus::Healthy => {
                 // If PING succeeds, optionally check cluster status
@@ -139,7 +138,7 @@ impl RedisHealthChecker {
 impl HealthChecker for RedisHealthChecker {
     async fn check_health(&self, backend: &Backend) -> HealthStatus {
         tracing::debug!("Checking Redis health for backend: {}", backend.id);
-        
+
         // Use comprehensive check that includes PING and optionally cluster status
         self.comprehensive_check(backend).await
     }
@@ -194,7 +193,7 @@ mod tests {
     fn test_ping_command_format() {
         // Verify our PING command is in correct RESP format
         let ping_command = "*1\r\n$4\r\nPING\r\n";
-        
+
         // RESP format breakdown:
         // *1 = Array with 1 element
         // $4 = Bulk string with 4 characters

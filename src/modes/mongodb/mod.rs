@@ -1,22 +1,21 @@
+pub mod affinity;
 /// MongoDB Sharded Cluster mode implementation
-/// 
+///
 /// This mode provides session-aware load balancing across multiple mongos instances.
 /// Key features:
 /// - Session affinity: ensures same client always connects to same mongos
 /// - TCP-level load balancing (no deep MongoDB protocol parsing needed)
 /// - Health checking of mongos instances
 /// - Weighted round-robin load balancing for new sessions
-
 pub mod balancer;
-pub mod affinity;
 
 use crate::core::Backend;
 use crate::modes::{BackendPool, RoutingDecision};
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// MongoDB mode configuration
 #[derive(Debug, Clone)]
@@ -45,10 +44,13 @@ impl MongoDBConfig {
             if endpoint.trim().is_empty() {
                 return Err("Empty mongos endpoint not allowed".to_string());
             }
-            
+
             // Basic format validation (host:port)
             if !endpoint.contains(':') {
-                return Err(format!("Invalid mongos endpoint format '{}': must be host:port", endpoint));
+                return Err(format!(
+                    "Invalid mongos endpoint format '{}': must be host:port",
+                    endpoint
+                ));
             }
         }
 
@@ -76,8 +78,8 @@ impl MongoDBConfig {
 
     /// Check if configuration is valid
     pub fn is_valid(&self) -> bool {
-        !self.mongos_endpoints.is_empty() 
-            && self.session_timeout_sec > 0 
+        !self.mongos_endpoints.is_empty()
+            && self.session_timeout_sec > 0
             && self.health_check_interval_sec > 0
     }
 }
@@ -144,7 +146,8 @@ impl SessionAffinityManager {
             return None;
         }
 
-        let index = self.round_robin_counter.fetch_add(1, Ordering::Relaxed) % available_backends.len();
+        let index =
+            self.round_robin_counter.fetch_add(1, Ordering::Relaxed) % available_backends.len();
         let backend_id = available_backends[index].clone();
 
         // Store the new affinity
@@ -187,14 +190,16 @@ impl MongoDBProxy {
 
     pub fn with_health_check(mut self) -> Self {
         let health_checker = Box::new(crate::health::mongodb::MongoDBHealthChecker::new());
-        self.health_manager = Some(Arc::new(crate::health::HealthCheckManager::new(health_checker)));
+        self.health_manager = Some(Arc::new(crate::health::HealthCheckManager::new(
+            health_checker,
+        )));
         self
     }
 
     /// Initialize backends from configuration
     pub async fn initialize_backends(&self) -> Result<(), Box<dyn std::error::Error>> {
         let mut backends = self.backends.write().await;
-        
+
         for (index, endpoint) in self.config.mongos_endpoints.iter().enumerate() {
             let addr: SocketAddr = endpoint.parse()?;
             let backend_id = format!("mongos-{}", index);
@@ -210,7 +215,7 @@ impl MongoDBProxy {
         if let Some(health_manager) = &self.health_manager {
             let backends = self.backends.clone();
             let health_manager = Arc::clone(health_manager);
-            
+
             tokio::spawn(async move {
                 loop {
                     {
@@ -220,20 +225,20 @@ impl MongoDBProxy {
                             log::debug!("Health check for {}: {:?}", backend.id, status);
                         }
                     }
-                    
+
                     // Sleep between health check cycles
                     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
                 }
             });
         }
-        
+
         Ok(())
     }
 
     /// Route request to appropriate mongos based on session affinity
     pub async fn route_request(&self, client_addr: SocketAddr) -> RoutingDecision {
         let backends = self.backends.read().await;
-        
+
         // Get healthy backends
         let healthy_backends: Vec<String> = backends
             .values()
@@ -249,7 +254,8 @@ impl MongoDBProxy {
 
         // Use session affinity if enabled
         if self.config.session_affinity_enabled {
-            if let Some(backend_id) = self.affinity_manager
+            if let Some(backend_id) = self
+                .affinity_manager
                 .get_backend_for_client(client_addr, &healthy_backends)
                 .await
             {
@@ -258,7 +264,11 @@ impl MongoDBProxy {
         }
 
         // Fallback to simple round-robin for new sessions
-        let index = self.affinity_manager.round_robin_counter.load(Ordering::Relaxed) % healthy_backends.len();
+        let index = self
+            .affinity_manager
+            .round_robin_counter
+            .load(Ordering::Relaxed)
+            % healthy_backends.len();
         let backend_id = healthy_backends[index].clone();
 
         RoutingDecision::Route { backend_id }
@@ -267,7 +277,9 @@ impl MongoDBProxy {
     /// Handle client disconnection
     pub async fn handle_client_disconnect(&self, client_addr: SocketAddr) -> bool {
         if self.config.session_affinity_enabled {
-            self.affinity_manager.remove_client_affinity(client_addr).await
+            self.affinity_manager
+                .remove_client_affinity(client_addr)
+                .await
         } else {
             false
         }
@@ -301,7 +313,8 @@ mod tests {
             true,
             300,
             10,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(config.endpoint_count(), 2);
         assert!(config.session_affinity_enabled);
@@ -312,15 +325,13 @@ mod tests {
 
     #[test]
     fn test_mongodb_config_validation_empty_endpoints() {
-        let result = MongoDBConfig::new(
-            vec![],
-            true,
-            300,
-            10,
-        );
+        let result = MongoDBConfig::new(vec![], true, 300, 10);
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "At least one mongos endpoint is required");
+        assert_eq!(
+            result.unwrap_err(),
+            "At least one mongos endpoint is required"
+        );
     }
 
     #[test]
@@ -339,40 +350,42 @@ mod tests {
     #[test]
     fn test_mongodb_config_validation_invalid_endpoint_format() {
         let result = MongoDBConfig::new(
-            vec!["127.0.0.1:27017".to_string(), "invalid-endpoint".to_string()],
+            vec![
+                "127.0.0.1:27017".to_string(),
+                "invalid-endpoint".to_string(),
+            ],
             true,
             300,
             10,
         );
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Invalid mongos endpoint format 'invalid-endpoint': must be host:port");
+        assert_eq!(
+            result.unwrap_err(),
+            "Invalid mongos endpoint format 'invalid-endpoint': must be host:port"
+        );
     }
 
     #[test]
     fn test_mongodb_config_validation_zero_session_timeout() {
-        let result = MongoDBConfig::new(
-            vec!["127.0.0.1:27017".to_string()],
-            true,
-            0,
-            10,
-        );
+        let result = MongoDBConfig::new(vec!["127.0.0.1:27017".to_string()], true, 0, 10);
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Session timeout must be greater than 0");
+        assert_eq!(
+            result.unwrap_err(),
+            "Session timeout must be greater than 0"
+        );
     }
 
     #[test]
     fn test_mongodb_config_validation_zero_health_check_interval() {
-        let result = MongoDBConfig::new(
-            vec!["127.0.0.1:27017".to_string()],
-            true,
-            300,
-            0,
-        );
+        let result = MongoDBConfig::new(vec!["127.0.0.1:27017".to_string()], true, 300, 0);
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Health check interval must be greater than 0");
+        assert_eq!(
+            result.unwrap_err(),
+            "Health check interval must be greater than 0"
+        );
     }
 
     #[tokio::test]
@@ -388,13 +401,17 @@ mod tests {
         let available_backends = vec!["mongos-0".to_string(), "mongos-1".to_string()];
 
         // First call should assign a backend
-        let backend1 = manager.get_backend_for_client(client_addr, &available_backends).await;
+        let backend1 = manager
+            .get_backend_for_client(client_addr, &available_backends)
+            .await;
         assert!(backend1.is_some());
         let backend1_clone = backend1.clone();
         assert!(available_backends.contains(&backend1.unwrap()));
 
         // Second call should return the same backend (session affinity)
-        let backend2 = manager.get_backend_for_client(client_addr, &available_backends).await;
+        let backend2 = manager
+            .get_backend_for_client(client_addr, &available_backends)
+            .await;
         assert_eq!(backend1_clone, backend2);
 
         assert_eq!(manager.session_count().await, 1);
@@ -406,7 +423,9 @@ mod tests {
         let client_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 12345);
         let available_backends = vec![];
 
-        let backend = manager.get_backend_for_client(client_addr, &available_backends).await;
+        let backend = manager
+            .get_backend_for_client(client_addr, &available_backends)
+            .await;
         assert!(backend.is_none());
     }
 
@@ -414,16 +433,20 @@ mod tests {
     async fn test_session_affinity_manager_backend_unavailable() {
         let manager = SessionAffinityManager::new();
         let client_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 12345);
-        
+
         // Initially assign backend
         let initial_backends = vec!["mongos-0".to_string(), "mongos-1".to_string()];
-        let backend1 = manager.get_backend_for_client(client_addr, &initial_backends).await;
+        let backend1 = manager
+            .get_backend_for_client(client_addr, &initial_backends)
+            .await;
         assert!(backend1.is_some());
 
         // Backend becomes unavailable
         let reduced_backends = vec!["mongos-2".to_string()];
-        let backend2 = manager.get_backend_for_client(client_addr, &reduced_backends).await;
-        
+        let backend2 = manager
+            .get_backend_for_client(client_addr, &reduced_backends)
+            .await;
+
         // Should assign a new backend since the old one is unavailable
         assert!(backend2.is_some());
         assert_eq!(backend2.unwrap(), "mongos-2");
@@ -436,7 +459,9 @@ mod tests {
         let available_backends = vec!["mongos-0".to_string()];
 
         // Assign backend
-        let _backend = manager.get_backend_for_client(client_addr, &available_backends).await;
+        let _backend = manager
+            .get_backend_for_client(client_addr, &available_backends)
+            .await;
         assert_eq!(manager.session_count().await, 1);
 
         // Remove affinity
@@ -457,7 +482,9 @@ mod tests {
         // Add multiple sessions
         for i in 0..5 {
             let client_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 12345 + i);
-            let _backend = manager.get_backend_for_client(client_addr, &available_backends).await;
+            let _backend = manager
+                .get_backend_for_client(client_addr, &available_backends)
+                .await;
         }
 
         assert_eq!(manager.session_count().await, 5);
@@ -480,7 +507,9 @@ mod tests {
         ];
 
         for &client_addr in &client_addrs {
-            let _backend = manager.get_backend_for_client(client_addr, &available_backends).await;
+            let _backend = manager
+                .get_backend_for_client(client_addr, &available_backends)
+                .await;
         }
 
         let active_clients = manager.get_active_clients().await;
@@ -493,12 +522,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_mongodb_proxy_creation() {
-        let config = MongoDBConfig::new(
-            vec!["127.0.0.1:27017".to_string()],
-            true,
-            300,
-            10,
-        ).unwrap();
+        let config =
+            MongoDBConfig::new(vec!["127.0.0.1:27017".to_string()], true, 300, 10).unwrap();
 
         let proxy = MongoDBProxy::new(config);
         assert_eq!(proxy.get_config().endpoint_count(), 1);
@@ -507,12 +532,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_mongodb_proxy_route_request_no_healthy_backends() {
-        let config = MongoDBConfig::new(
-            vec!["127.0.0.1:27017".to_string()],
-            true,
-            300,
-            10,
-        ).unwrap();
+        let config =
+            MongoDBConfig::new(vec!["127.0.0.1:27017".to_string()], true, 300, 10).unwrap();
 
         let proxy = MongoDBProxy::new(config);
         let client_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 12345);
@@ -534,7 +555,8 @@ mod tests {
             true, // Affinity enabled
             300,
             10,
-        ).unwrap();
+        )
+        .unwrap();
 
         let proxy = MongoDBProxy::new(config);
         let client_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 12345);
@@ -558,7 +580,8 @@ mod tests {
             false, // Affinity disabled
             300,
             10,
-        ).unwrap();
+        )
+        .unwrap();
 
         let proxy = MongoDBProxy::new(config);
         let client_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 12345);
@@ -570,12 +593,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_mongodb_proxy_with_health_check() {
-        let config = MongoDBConfig::new(
-            vec!["127.0.0.1:27017".to_string()],
-            true,
-            300,
-            10,
-        ).unwrap();
+        let config =
+            MongoDBConfig::new(vec!["127.0.0.1:27017".to_string()], true, 300, 10).unwrap();
 
         let proxy = MongoDBProxy::new(config).with_health_check();
         assert!(proxy.health_manager.is_some());
@@ -583,19 +602,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_mongodb_proxy_start_health_checks() {
-        let config = MongoDBConfig::new(
-            vec!["127.0.0.1:27017".to_string()],
-            true,
-            300,
-            10,
-        ).unwrap();
+        let config =
+            MongoDBConfig::new(vec!["127.0.0.1:27017".to_string()], true, 300, 10).unwrap();
 
         let proxy = MongoDBProxy::new(config).with_health_check();
-        
+
         // Initialize backends first
         let result = proxy.initialize_backends().await;
         assert!(result.is_ok());
-        
+
         // Start health checks should succeed
         let result = proxy.start_health_checks().await;
         assert!(result.is_ok());
@@ -603,15 +618,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_mongodb_proxy_start_health_checks_without_health_manager() {
-        let config = MongoDBConfig::new(
-            vec!["127.0.0.1:27017".to_string()],
-            true,
-            300,
-            10,
-        ).unwrap();
+        let config =
+            MongoDBConfig::new(vec!["127.0.0.1:27017".to_string()], true, 300, 10).unwrap();
 
         let proxy = MongoDBProxy::new(config); // No health manager
-        
+
         // Should succeed but do nothing
         let result = proxy.start_health_checks().await;
         assert!(result.is_ok());

@@ -1,5 +1,4 @@
 /// Health checking for MongoDB and Redis backends
-
 pub mod mongodb;
 pub mod redis;
 
@@ -21,10 +20,10 @@ pub enum HealthStatus {
 pub trait HealthChecker: Send + Sync {
     /// Perform health check on a backend
     async fn check_health(&self, backend: &Backend) -> HealthStatus;
-    
+
     /// Get the check interval for this health checker
     fn check_interval(&self) -> Duration;
-    
+
     /// Get the timeout for health checks
     fn check_timeout(&self) -> Duration;
 }
@@ -42,7 +41,7 @@ impl HealthCheckManager {
     /// Perform health check with timeout
     pub async fn check_backend_health(&self, backend: &mut Backend) -> HealthStatus {
         let check_timeout = self.checker.check_timeout();
-        
+
         let status = match timeout(check_timeout, self.checker.check_health(backend)).await {
             Ok(status) => status,
             Err(_) => HealthStatus::Timeout,
@@ -58,12 +57,12 @@ impl HealthCheckManager {
     /// Run continuous health checking for a backend
     pub async fn run_health_checks(&self, backend: &mut Backend) {
         let mut interval = tokio::time::interval(self.checker.check_interval());
-        
+
         loop {
             interval.tick().await;
-            
+
             let status = self.check_backend_health(backend).await;
-            
+
             match status {
                 HealthStatus::Healthy => {
                     tracing::debug!("Backend {} is healthy", backend.id);
@@ -85,11 +84,7 @@ impl HealthCheckManager {
 /// Utility function to create appropriate health checker based on backend type
 pub fn create_health_checker(backend: &Backend) -> Box<dyn HealthChecker> {
     match &backend.metadata {
-        BackendMetadata::MongoDB { .. } => {
-            Box::new(mongodb::MongoDBHealthChecker::new())
-        }
-        BackendMetadata::Redis { .. } => {
-            Box::new(redis::RedisHealthChecker::new())
-        }
+        BackendMetadata::MongoDB { .. } => Box::new(mongodb::MongoDBHealthChecker::new()),
+        BackendMetadata::Redis { .. } => Box::new(redis::RedisHealthChecker::new()),
     }
 }

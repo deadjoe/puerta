@@ -1,5 +1,4 @@
 /// Redis slot management and mapping
-
 use std::collections::HashMap;
 
 /// Redis cluster slot mapping (0-16383)
@@ -128,7 +127,7 @@ impl SlotMap {
             let _node_id = parts[0];
             let address_port = parts[1];
             let flags = parts[2];
-            
+
             // Skip replica nodes and failed nodes
             if flags.contains("slave") || flags.contains("fail") {
                 continue;
@@ -147,7 +146,9 @@ impl SlotMap {
                     // Range like "0-5460"
                     let range_parts: Vec<&str> = slot_spec.split('-').collect();
                     if range_parts.len() == 2 {
-                        if let (Ok(start), Ok(end)) = (range_parts[0].parse::<u16>(), range_parts[1].parse::<u16>()) {
+                        if let (Ok(start), Ok(end)) =
+                            (range_parts[0].parse::<u16>(), range_parts[1].parse::<u16>())
+                        {
                             self.assign_slots(address.to_string(), SlotRange::new(start, end));
                         }
                     }
@@ -209,16 +210,25 @@ mod tests {
     #[test]
     fn test_slot_assignment() {
         let mut slot_map = SlotMap::new();
-        
+
         // Assign slots 0-100 to backend1
         slot_map.assign_slots("backend1".to_string(), SlotRange::new(0, 100));
-        
+
         // Check slot assignment
-        assert_eq!(slot_map.get_backend_for_slot(0), Some(&"backend1".to_string()));
-        assert_eq!(slot_map.get_backend_for_slot(50), Some(&"backend1".to_string()));
-        assert_eq!(slot_map.get_backend_for_slot(100), Some(&"backend1".to_string()));
+        assert_eq!(
+            slot_map.get_backend_for_slot(0),
+            Some(&"backend1".to_string())
+        );
+        assert_eq!(
+            slot_map.get_backend_for_slot(50),
+            Some(&"backend1".to_string())
+        );
+        assert_eq!(
+            slot_map.get_backend_for_slot(100),
+            Some(&"backend1".to_string())
+        );
         assert_eq!(slot_map.get_backend_for_slot(101), None);
-        
+
         // Check backend slots
         let ranges = slot_map.get_slots_for_backend("backend1").unwrap();
         assert_eq!(ranges.len(), 1);
@@ -228,16 +238,16 @@ mod tests {
     #[test]
     fn test_slot_coverage() {
         let mut slot_map = SlotMap::new();
-        
+
         // Assign first half to backend1, second half to backend2
         slot_map.assign_slots("backend1".to_string(), SlotRange::new(0, 8191));
         slot_map.assign_slots("backend2".to_string(), SlotRange::new(8192, 16383));
-        
+
         let coverage = slot_map.get_coverage();
         assert_eq!(coverage.assigned_slots, 16384);
         assert_eq!(coverage.coverage_percentage, 100.0);
         assert!(slot_map.is_complete());
-        
+
         assert_eq!(coverage.backend_distribution.get("backend1"), Some(&8192));
         assert_eq!(coverage.backend_distribution.get("backend2"), Some(&8192));
     }
@@ -245,7 +255,7 @@ mod tests {
     #[test]
     fn test_cluster_nodes_parsing() {
         let mut slot_map = SlotMap::new();
-        
+
         let cluster_nodes = r#"
 07c37dfeb235213a872192d90877d0cd55635b91 127.0.0.1:30004@31004 slave e7d1eecce10fd6bb5eb35b9f99a514335d9ba9ca 0 1426238317239 4 connected
 67ed2db8d677e59ec4a4cefb06858cf2a1a89fa1 127.0.0.1:30002@31002 master - 0 1426238316232 2 connected 5461-10922
@@ -256,17 +266,35 @@ e7d1eecce10fd6bb5eb35b9f99a514335d9ba9ca 127.0.0.1:30001@31001 myself,master - 0
 "#;
 
         slot_map.update_from_cluster_nodes(cluster_nodes).unwrap();
-        
+
         // Verify slot assignments
-        assert_eq!(slot_map.get_backend_for_slot(0), Some(&"127.0.0.1:30001".to_string()));
-        assert_eq!(slot_map.get_backend_for_slot(5460), Some(&"127.0.0.1:30001".to_string()));
-        assert_eq!(slot_map.get_backend_for_slot(5461), Some(&"127.0.0.1:30002".to_string()));
-        assert_eq!(slot_map.get_backend_for_slot(10922), Some(&"127.0.0.1:30002".to_string()));
-        assert_eq!(slot_map.get_backend_for_slot(10923), Some(&"127.0.0.1:30003".to_string()));
-        assert_eq!(slot_map.get_backend_for_slot(16383), Some(&"127.0.0.1:30003".to_string()));
-        
+        assert_eq!(
+            slot_map.get_backend_for_slot(0),
+            Some(&"127.0.0.1:30001".to_string())
+        );
+        assert_eq!(
+            slot_map.get_backend_for_slot(5460),
+            Some(&"127.0.0.1:30001".to_string())
+        );
+        assert_eq!(
+            slot_map.get_backend_for_slot(5461),
+            Some(&"127.0.0.1:30002".to_string())
+        );
+        assert_eq!(
+            slot_map.get_backend_for_slot(10922),
+            Some(&"127.0.0.1:30002".to_string())
+        );
+        assert_eq!(
+            slot_map.get_backend_for_slot(10923),
+            Some(&"127.0.0.1:30003".to_string())
+        );
+        assert_eq!(
+            slot_map.get_backend_for_slot(16383),
+            Some(&"127.0.0.1:30003".to_string())
+        );
+
         assert!(slot_map.is_complete());
-        
+
         let coverage = slot_map.get_coverage();
         assert_eq!(coverage.assigned_slots, 16384);
     }

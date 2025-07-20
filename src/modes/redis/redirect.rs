@@ -1,14 +1,13 @@
 /// Redis cluster redirection handling (MOVED and ASK)
-/// 
+///
 /// Based on RCProxy's implementation for handling Redis cluster redirections.
-/// Implements efficient parsing of MOVED/ASK responses using Aho-Corasick for 
+/// Implements efficient parsing of MOVED/ASK responses using Aho-Corasick for
 /// pattern matching similar to rcproxy/src/protocol/redis/resp.rs
-
 use super::resp::RespValue;
-use std::str;
 use aho_corasick::AhoCorasick;
 use bytes::Bytes;
 use lazy_static::lazy_static;
+use std::str;
 
 /// Types of Redis cluster redirections
 #[derive(Debug, Clone, PartialEq)]
@@ -24,7 +23,8 @@ const BYTE_SPACE: u8 = b' ';
 const PATTERNS: &[&str] = &["ASK", "MOVED"];
 
 lazy_static! {
-    static ref FINDER: AhoCorasick = AhoCorasick::new(PATTERNS).expect("Failed to create AhoCorasick pattern finder");
+    static ref FINDER: AhoCorasick =
+        AhoCorasick::new(PATTERNS).expect("Failed to create AhoCorasick pattern finder");
 }
 
 /// Redis cluster redirection parser with RCProxy-style efficient parsing
@@ -48,23 +48,23 @@ impl RedirectParser {
         if let Some(mat) = FINDER.find(data) {
             let pat = mat.pattern();
             let end = mat.end();
-            
+
             // Check if there's a space after the pattern
             if end >= data.len() || data[end] != BYTE_SPACE {
                 return None;
             }
-            
+
             let rdata = &data[end + 1..];
 
             let pos = rdata.iter().position(|&x| x == BYTE_SPACE)?;
 
             let sdata = &rdata[..pos];
             let tdata = &rdata[pos + 1..];
-            
+
             if let Ok(slot) = btoi::btoi::<u16>(sdata) {
                 let to = String::from_utf8_lossy(tdata);
                 let to = to.trim_end_matches('\n').trim_end_matches('\r').to_string();
-                
+
                 if pat.as_u32() == 0 {
                     return Some(RedirectType::Ask { slot, address: to });
                 } else {
@@ -79,9 +79,7 @@ impl RedirectParser {
     /// Parse a RESP error response to extract redirection information
     pub fn parse_redirect(resp_value: &RespValue) -> Result<RedirectType, RedirectError> {
         match resp_value {
-            RespValue::Error(error_msg) => {
-                Self::parse_error_message(error_msg)
-            }
+            RespValue::Error(error_msg) => Self::parse_error_message(error_msg),
             _ => Err(RedirectError::NotRedirection),
         }
     }
@@ -193,9 +191,11 @@ impl RedirectionContext {
 
     pub fn add_redirect(&mut self, target: &str) -> Result<(), RedirectError> {
         if self.redirect_count >= self.max_redirects {
-            return Err(RedirectError::InvalidFormat("Max redirects exceeded".to_string()));
+            return Err(RedirectError::InvalidFormat(
+                "Max redirects exceeded".to_string(),
+            ));
         }
-        
+
         self.redirect_count += 1;
         self.redirect_chain.push(target.to_string());
         Ok(())
@@ -251,7 +251,10 @@ impl RedirectHandler {
 
         match redirect {
             RedirectType::Moved { slot, address } => {
-                let redirect_clone = RedirectType::Moved { slot, address: address.clone() };
+                let redirect_clone = RedirectType::Moved {
+                    slot,
+                    address: address.clone(),
+                };
                 Ok(RedirectAction::Retry {
                     address,
                     slot,
@@ -260,7 +263,10 @@ impl RedirectHandler {
                 })
             }
             RedirectType::Ask { slot, address } => {
-                let redirect_clone = RedirectType::Ask { slot, address: address.clone() };
+                let redirect_clone = RedirectType::Ask {
+                    slot,
+                    address: address.clone(),
+                };
                 Ok(RedirectAction::Retry {
                     address,
                     slot,
@@ -288,18 +294,22 @@ impl RedirectHandler {
         if let Some(colon_pos) = address.rfind(':') {
             let host = &address[..colon_pos];
             let port_str = &address[colon_pos + 1..];
-            
+
             if host.is_empty() {
                 return Err(RedirectError::InvalidFormat("Empty host".to_string()));
             }
-            
+
             if let Err(_) = port_str.parse::<u16>() {
-                return Err(RedirectError::InvalidFormat("Invalid port number".to_string()));
+                return Err(RedirectError::InvalidFormat(
+                    "Invalid port number".to_string(),
+                ));
             }
-            
+
             Ok(())
         } else {
-            Err(RedirectError::InvalidFormat("Missing port separator".to_string()))
+            Err(RedirectError::InvalidFormat(
+                "Missing port separator".to_string(),
+            ))
         }
     }
 
@@ -313,23 +323,29 @@ impl RedirectHandler {
             RedirectType::Moved { slot, address } => {
                 Self::validate_node_address(&address)?;
                 context.add_redirect(&address)?;
-                
+
                 log::info!(
                     "Handling MOVED redirection for slot {} to {} (redirect #{}/{})",
-                    slot, address, context.redirect_count, context.max_redirects
+                    slot,
+                    address,
+                    context.redirect_count,
+                    context.max_redirects
                 );
-                
+
                 Ok(Redirection::new_move(slot, address))
             }
             RedirectType::Ask { slot, address } => {
                 Self::validate_node_address(&address)?;
                 context.add_redirect(&address)?;
-                
+
                 log::info!(
                     "Handling ASK redirection for slot {} to {} (redirect #{}/{})",
-                    slot, address, context.redirect_count, context.max_redirects
+                    slot,
+                    address,
+                    context.redirect_count,
+                    context.max_redirects
                 );
-                
+
                 Ok(Redirection::new_ask(slot, address))
             }
         }
@@ -358,7 +374,7 @@ mod tests {
     fn test_parse_moved_redirect() {
         let error = RespValue::Error("MOVED 3999 127.0.0.1:6381".to_string());
         let redirect = RedirectParser::parse_redirect(&error).unwrap();
-        
+
         match redirect {
             RedirectType::Moved { slot, address } => {
                 assert_eq!(slot, 3999);
@@ -372,7 +388,7 @@ mod tests {
     fn test_parse_ask_redirect() {
         let error = RespValue::Error("ASK 3999 127.0.0.1:6381".to_string());
         let redirect = RedirectParser::parse_redirect(&error).unwrap();
-        
+
         match redirect {
             RedirectType::Ask { slot, address } => {
                 assert_eq!(slot, 3999);
@@ -423,7 +439,12 @@ mod tests {
 
         let action = handler.handle_redirect(redirect, 0).unwrap();
         match action {
-            RedirectAction::Retry { address, slot, requires_asking, .. } => {
+            RedirectAction::Retry {
+                address,
+                slot,
+                requires_asking,
+                ..
+            } => {
                 assert_eq!(address, "127.0.0.1:6381");
                 assert_eq!(slot, 1000);
                 assert!(!requires_asking); // MOVED doesn't require ASKING
@@ -480,7 +501,7 @@ mod tests {
         // Test RCProxy-style parsing with raw bytes
         let moved_data = b"MOVED 3999 127.0.0.1:6381\r\n";
         let redirect = RedirectParser::parse_redirect_bytes(moved_data).unwrap();
-        
+
         match redirect {
             RedirectType::Moved { slot, address } => {
                 assert_eq!(slot, 3999);
@@ -491,7 +512,7 @@ mod tests {
 
         let ask_data = b"ASK 12345 192.168.1.100:6380\r\n";
         let redirect = RedirectParser::parse_redirect_bytes(ask_data).unwrap();
-        
+
         match redirect {
             RedirectType::Ask { slot, address } => {
                 assert_eq!(slot, 12345);
@@ -516,7 +537,7 @@ mod tests {
     #[test]
     fn test_redirection_context() {
         let mut context = RedirectionContext::new(3999, 3);
-        
+
         assert_eq!(context.original_slot, 3999);
         assert_eq!(context.redirect_count, 0);
         assert!(context.can_redirect());
@@ -564,22 +585,32 @@ mod tests {
         // Invalid addresses
         assert!(RedirectHandler::validate_node_address("127.0.0.1").is_err()); // Missing port
         assert!(RedirectHandler::validate_node_address(":6379").is_err()); // Empty host
-        assert!(RedirectHandler::validate_node_address("127.0.0.1:invalid").is_err()); // Invalid port
+        assert!(RedirectHandler::validate_node_address("127.0.0.1:invalid").is_err());
+        // Invalid port
     }
 
     #[tokio::test]
     async fn test_handle_redirection() {
         let handler = RedirectHandler::new(3);
         let mut context = RedirectionContext::new(3999, 3);
-        
+
         // Test MOVED redirection
-        let moved = RedirectType::Moved { slot: 3999, address: "127.0.0.1:6381".to_string() };
-        let redirection = handler.handle_redirection(moved, &mut context).await.unwrap();
+        let moved = RedirectType::Moved {
+            slot: 3999,
+            address: "127.0.0.1:6381".to_string(),
+        };
+        let redirection = handler
+            .handle_redirection(moved, &mut context)
+            .await
+            .unwrap();
         assert!(!redirection.requires_asking);
         assert_eq!(context.redirect_count, 1);
 
         // Test ASK redirection
-        let ask = RedirectType::Ask { slot: 3999, address: "192.168.1.100:6380".to_string() };
+        let ask = RedirectType::Ask {
+            slot: 3999,
+            address: "192.168.1.100:6380".to_string(),
+        };
         let redirection = handler.handle_redirection(ask, &mut context).await.unwrap();
         assert!(redirection.requires_asking);
         assert_eq!(context.redirect_count, 2);
