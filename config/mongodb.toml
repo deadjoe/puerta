@@ -1,0 +1,38 @@
+# Puerta configuration for MongoDB Sharded Cluster load balancing
+# This configuration enables session-aware load balancing across multiple mongos instances
+
+[server]
+listen_addr = "0.0.0.0:8080"
+max_connections = 10000
+connection_timeout_sec = 60
+worker_threads = 4  # Optional: defaults to number of CPU cores
+
+[proxy]
+mode = "mongodb"
+# List of mongos instances to load balance across
+mongos_endpoints = [
+    "10.0.1.10:27017",
+    "10.0.1.11:27017", 
+    "10.0.1.12:27017"
+]
+# Enable session affinity - CRITICAL for MongoDB cursor consistency
+session_affinity = true
+# Session timeout in seconds
+session_timeout_sec = 3600
+
+[health]
+# Health check interval in seconds
+interval_sec = 10
+# Health check timeout in seconds
+timeout_sec = 5
+# Number of consecutive failures before marking unhealthy
+failure_threshold = 3
+# Number of consecutive successes before marking healthy  
+success_threshold = 2
+
+[logging]
+level = "info"
+format = "text"
+stdout = true
+# Optional: log to file
+# file = "/var/log/puerta/puerta.log"

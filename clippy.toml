@@ -1,0 +1,8 @@
+msrv = "1.75"
+allow-expect-in-tests = true
+allow-unwrap-in-tests = true
+warn-on-all-wildcard-imports = true
+disallowed-methods = [
+    { path = "std::collections::HashMap::new", reason = "use fnv::FnvHashMap for better performance" },
+    { path = "std::collections::HashSet::new", reason = "use fnv::FnvHashSet for better performance" },
+]

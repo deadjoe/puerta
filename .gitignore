@@ -1,0 +1,54 @@
+# Rust build artifacts
+/target/
+Cargo.lock
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Runtime files
+*.log
+*.pid
+
+# Test coverage files
+/coverage/
+tarpaulin-report.html
+
+# Local configuration files
+.env
+.env.local
+
+# Benchmark results
+/bench-results/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Lock files for package managers
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Binary distribution files
+/dist/
+/release/
+
+# Development tools
+.cargo/config
+
+# External dependencies/examples 
+/examples/pingora/
+/examples/rcproxy/
