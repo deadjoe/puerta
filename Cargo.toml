@@ -8,16 +8,20 @@ license = "Apache-2.0"
 repository = "https://github.com/deadjoe/puerta"
 
 [dependencies]
-# Pingora framework dependencies
-# Note: These will need to be published crates or git dependencies
-# pingora = "0.5"
-# pingora-core = "0.5"
-# pingora-proxy = "0.5"
-# pingora-load-balancing = "0.5"
-# pingora-http = "0.5"
+# Local development dependencies - uncomment after cloning Pingora to examples/
+# See DEV-SETUP.md for complete setup instructions
+#
+# For local development, uncomment these lines:
+# pingora = { path = "examples/pingora" }
+# pingora-core = { path = "examples/pingora/pingora-core" }  
+# pingora-load-balancing = { path = "examples/pingora/pingora-load-balancing" }
+#
+# For production builds, use crates.io versions when available:
+# pingora = "0.1"
+# pingora-core = "0.1" 
+# pingora-load-balancing = "0.1"
 
-# Redis cluster protocol support (from RCProxy)
-# Will integrate RCProxy components as needed
+# Redis cluster protocol support (integrated from RCProxy patterns)
 
 # Standard dependencies
 tokio = { version = "1.37", features = ["full"] }
