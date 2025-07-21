@@ -52,3 +52,6 @@ yarn-error.log*
 # External dependencies/examples 
 /examples/pingora/
 /examples/rcproxy/
+
+# Internal development documentation
+CLAUDE.md
