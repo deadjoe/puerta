@@ -1,6 +1,5 @@
 /// Core abstractions shared between MongoDB and Redis modes
 pub mod backend;
-pub mod connection;
 pub mod frontend;
 pub mod session;
 

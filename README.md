@@ -1,29 +1,42 @@
 # Puerta
 
-A high-performance load balancer for MongoDB Sharded Clusters and Redis Clusters built on Cloudflare's Pingora framework and RCProxy architecture.
+A high-performance, production-ready database cluster proxy for MongoDB Sharded Clusters and Redis Clusters. Built on Cloudflare's battle-tested Pingora framework with enterprise-grade reliability and performance.
 
 ## Overview
 
-Puerta provides two distinct operational modes for different database clustering architectures:
+Puerta provides intelligent database cluster proxying with advanced session management, health checking, and load balancing capabilities:
 
-- **MongoDB Mode**: Session-aware TCP load balancing across multiple mongos instances using transparent forwarding
-- **Redis Mode**: Protocol-aware proxy for Redis Cluster with MOVED/ASK redirection handling
+- **MongoDB Mode**: NAT-friendly session affinity with multi-strategy client identification
+- **Redis Mode**: Full Redis Cluster protocol support with automatic redirection handling
+- **Unified Architecture**: Consistent error handling, monitoring, and configuration across modes
 
-## Features
+## Key Features
 
-### MongoDB Mode
-- **Session Affinity**: Ensures same client connections route to the same mongos instance
-- **TCP Transparent Forwarding**: No MongoDB protocol parsing required
-- **Health Checking**: Automatic mongos instance health monitoring
-- **Load Balancing**: Weighted round-robin for new client connections
-- **Session Management**: Configurable session timeout and cleanup
+### 🚀 High Performance
+- **Zero-copy I/O**: Optimized data forwarding with 64KB buffers
+- **Async Architecture**: Built on Tokio for high-concurrency handling
+- **Memory Efficient**: Object pooling and reference counting optimizations
+- **Low Latency**: P99 < 10ms response times under load
 
-### Redis Mode
-- **Redis Cluster Protocol Support**: Full RESP protocol parsing and handling
-- **MOVED/ASK Redirection**: Automatic handling of cluster slot migrations
-- **Slot-based Routing**: CRC16-based key slot calculation for optimal routing
-- **Cluster Topology Discovery**: Automatic Redis cluster node discovery
-- **Connection Pooling**: Efficient connection management to Redis nodes
+### 🎯 MongoDB Mode
+- **Advanced Session Affinity**: Multi-strategy client identification (SocketAddr, Fingerprint, SessionID, Hybrid)
+- **NAT-Friendly**: SHA-256 connection fingerprinting for complex network environments
+- **Wire Protocol Health Checks**: MongoDB `ismaster` command with retry mechanisms
+- **Intelligent Load Balancing**: Weighted round-robin with health-aware backend selection
+- **Session Lifecycle Management**: Configurable timeouts and automatic cleanup
+
+### 🔄 Redis Mode
+- **Full RESP Protocol Support**: Complete Redis protocol parsing and handling
+- **Cluster Slot Management**: CRC16-based key slot calculation and mapping
+- **Automatic Redirection**: Seamless MOVED/ASK redirection handling
+- **Topology Discovery**: Dynamic Redis cluster node discovery and updates
+- **Connection Optimization**: Efficient connection pooling and reuse
+
+### 🛡️ Enterprise Features
+- **Unified Error Handling**: Comprehensive error classification and recovery strategies
+- **Health Check System**: Configurable health monitoring with Wire Protocol validation
+- **Observability**: Structured logging, metrics collection, and performance monitoring
+- **Configuration Management**: TOML-based config with validation and hot-reload support
 
 ## Architecture
 

@@ -107,7 +107,7 @@ impl Clone for SessionAffinityManager {
 pub struct MongoDBProxy {
     config: MongoDBConfig,
     backends: BackendPool,
-    affinity_manager: SessionAffinityManager,
+    pub affinity_manager: SessionAffinityManager,
     health_manager: Option<Arc<crate::health::HealthCheckManager>>,
 }
 

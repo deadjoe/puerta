@@ -10,6 +10,9 @@ use tokio::net::TcpStream;
 pub struct RedisHealthChecker {
     check_interval: Duration,
     check_timeout: Duration,
+    max_retries: u32,
+    retry_delay: Duration,
+    enable_cluster_check: bool,
 }
 
 impl RedisHealthChecker {
@@ -17,6 +20,25 @@ impl RedisHealthChecker {
         Self {
             check_interval: Duration::from_secs(5),
             check_timeout: Duration::from_secs(3),
+            max_retries: 3,
+            retry_delay: Duration::from_millis(300),
+            enable_cluster_check: true,
+        }
+    }
+    
+    pub fn with_config(
+        check_interval: Duration, 
+        check_timeout: Duration, 
+        max_retries: u32, 
+        retry_delay: Duration,
+        enable_cluster_check: bool
+    ) -> Self {
+        Self {
+            check_interval,
+            check_timeout,
+            max_retries,
+            retry_delay,
+            enable_cluster_check,
         }
     }
 
@@ -117,30 +139,57 @@ impl RedisHealthChecker {
         }
     }
 
-    /// Comprehensive Redis health check
-    async fn comprehensive_check(&self, backend: &Backend) -> HealthStatus {
-        // First do basic PING check
-        let ping_status = self.redis_ping_check(backend).await;
-
-        match ping_status {
-            HealthStatus::Healthy => {
-                // If PING succeeds, optionally check cluster status
-                // For now, just return healthy if PING works
-                // TODO: Add cluster nodes check for production deployment
-                HealthStatus::Healthy
+    /// Comprehensive Redis health check with retry mechanism
+    async fn redis_health_check_with_retry(&self, backend: &Backend) -> HealthStatus {
+        for attempt in 0..=self.max_retries {
+            let status = self.comprehensive_redis_check(backend).await;
+            
+            match status {
+                HealthStatus::Healthy => return status,
+                HealthStatus::Unhealthy { .. } | HealthStatus::Timeout => {
+                    if attempt < self.max_retries {
+                        log::warn!("Redis health check attempt {} failed for {}, retrying in {:?}", 
+                                 attempt + 1, backend.addr, self.retry_delay);
+                        tokio::time::sleep(self.retry_delay).await;
+                        continue;
+                    } else {
+                        return status;
+                    }
+                }
+                _ => return status,
             }
-            other => other,
         }
+        
+        HealthStatus::Unhealthy {
+            reason: "All retry attempts exhausted".to_string(),
+        }
+    }
+    
+    /// Comprehensive Redis health check
+    async fn comprehensive_redis_check(&self, backend: &Backend) -> HealthStatus {
+        // First perform PING check
+        let ping_status = self.redis_ping_check(backend).await;
+        if !matches!(ping_status, HealthStatus::Healthy) {
+            return ping_status;
+        }
+
+        // Then perform cluster check if enabled
+        if self.enable_cluster_check {
+            let cluster_status = self.redis_cluster_check(backend).await;
+            if !matches!(cluster_status, HealthStatus::Healthy) {
+                return cluster_status;
+            }
+        }
+
+        HealthStatus::Healthy
     }
 }
 
 #[async_trait::async_trait]
 impl HealthChecker for RedisHealthChecker {
     async fn check_health(&self, backend: &Backend) -> HealthStatus {
-        tracing::debug!("Checking Redis health for backend: {}", backend.id);
-
-        // Use comprehensive check that includes PING and optionally cluster status
-        self.comprehensive_check(backend).await
+        // Use the enhanced Redis health check with retry mechanism
+        self.redis_health_check_with_retry(backend).await
     }
 
     fn check_interval(&self) -> Duration {

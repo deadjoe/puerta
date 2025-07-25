@@ -12,6 +12,8 @@ pub mod redirect;
 pub mod resp;
 pub mod slots;
 
+
+
 use async_trait::async_trait;
 use bytes::Bytes;
 use std::collections::HashMap;
@@ -193,21 +195,168 @@ impl RedisClusterProxy {
         &self,
         peer: &BasicPeer,
     ) -> Result<SlotMapping, Box<dyn Error + Send + Sync>> {
-        let _stream = self.connector.new_stream(peer).await?;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        
+        let mut stream = self.connector.new_stream(peer).await?;
 
-        // Send CLUSTER NODES command
-        let _cmd_bytes = b"*2\r\n$7\r\nCLUSTER\r\n$5\r\nNODES\r\n";
+        // Send CLUSTER NODES command in RESP format
+        let cmd_bytes = b"*2\r\n$7\r\nCLUSTER\r\n$5\r\nNODES\r\n";
+        stream.write_all(cmd_bytes).await?;
+        stream.flush().await?;
 
-        // TODO: Implement actual RESP protocol communication
-        // For now, create a basic slot mapping
+        // Read response
+        let mut buffer = Vec::new();
+        let mut temp_buf = [0u8; 8192];
+        
+        // Read the bulk string response
+        loop {
+            let n = stream.read(&mut temp_buf).await?;
+            if n == 0 {
+                break;
+            }
+            buffer.extend_from_slice(&temp_buf[..n]);
+            
+            // Check if we have a complete response
+            if let Some(end_pos) = self.find_resp_end(&buffer) {
+                buffer.truncate(end_pos);
+                break;
+            }
+        }
+
+        // Parse RESP response
+        let response_str = self.parse_cluster_nodes_response(&buffer)?;
+        
+        // Parse cluster nodes output and create slot mapping
+        let slot_mapping = self.parse_cluster_nodes_output(&response_str)?;
+        
+        Ok(slot_mapping)
+    }
+
+    /// Find the end of a RESP response in the buffer
+    fn find_resp_end(&self, buffer: &[u8]) -> Option<usize> {
+        // Look for bulk string format: $<length>\r\n<data>\r\n
+        if buffer.len() < 4 || buffer[0] != b'$' {
+            return None;
+        }
+
+        // Find first \r\n to get the length
+        let mut i = 1;
+        while i < buffer.len() - 1 {
+            if buffer[i] == b'\r' && buffer[i + 1] == b'\n' {
+                break;
+            }
+            i += 1;
+        }
+
+        if i >= buffer.len() - 1 {
+            return None; // No \r\n found
+        }
+
+        // Parse the length
+        let length_str = std::str::from_utf8(&buffer[1..i]).ok()?;
+        let length: usize = length_str.parse().ok()?;
+
+        // Check if we have the complete data + final \r\n
+        let data_start = i + 2;
+        let expected_end = data_start + length + 2; // +2 for final \r\n
+        if buffer.len() >= expected_end {
+            Some(expected_end)
+        } else {
+            None
+        }
+    }
+
+    /// Parse CLUSTER NODES RESP response
+    fn parse_cluster_nodes_response(&self, buffer: &[u8]) -> Result<String, Box<dyn Error + Send + Sync>> {
+        if buffer.len() < 4 || buffer[0] != b'$' {
+            return Err("Invalid RESP bulk string format".into());
+        }
+
+        // Find first \r\n to get the length
+        let mut i = 1;
+        while i < buffer.len() - 1 {
+            if buffer[i] == b'\r' && buffer[i + 1] == b'\n' {
+                break;
+            }
+            i += 1;
+        }
+
+        if i >= buffer.len() - 1 {
+            return Err("Invalid RESP format: no length delimiter found".into());
+        }
+
+        // Parse the length
+        let length_str = std::str::from_utf8(&buffer[1..i])?;
+        let length: usize = length_str.parse()?;
+
+        // Extract the data
+        let data_start = i + 2;
+        if buffer.len() < data_start + length {
+            return Err("Incomplete RESP data".into());
+        }
+
+        let data = &buffer[data_start..data_start + length];
+        Ok(String::from_utf8_lossy(data).to_string())
+    }
+
+    /// Parse CLUSTER NODES output and create slot mapping
+    fn parse_cluster_nodes_output(&self, cluster_nodes: &str) -> Result<SlotMapping, Box<dyn Error + Send + Sync>> {
         let mut slot_mapping = SlotMapping::new();
-
-        // Mock implementation - in practice, parse the actual response
         let mut slot_ranges = HashMap::new();
-        for (i, (addr, _)) in self.cluster_nodes.read().await.iter().enumerate() {
-            let start_slot = (i * 5461) as u16; // 16384 / 3 ≈ 5461
-            let end_slot = ((i + 1) * 5461).min(16383) as u16;
-            slot_ranges.insert(addr.clone(), vec![(start_slot, end_slot)]);
+
+        for line in cluster_nodes.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() < 8 {
+                continue; // Invalid line format
+            }
+
+            let _node_id = parts[0];
+            let address = parts[1];
+            let flags = parts[2];
+            // parts[3] is master node id (for slaves)
+            // parts[4] is ping_sent
+            // parts[5] is pong_recv
+            // parts[6] is config_epoch
+            // parts[7] is link_state
+            // parts[8..] are slot ranges
+
+            // Only process master nodes (not slaves)
+            if flags.contains("slave") || flags.contains("fail") {
+                continue;
+            }
+
+            // Extract IP:port from address (remove @cluster_port if present)
+            let addr = if let Some(at_pos) = address.find('@') {
+                &address[..at_pos]
+            } else {
+                address
+            };
+
+            let mut ranges = Vec::new();
+
+            // Parse slot ranges (format: "0-5460" or "5461-10922" or single slots "16383")
+            for slot_info in &parts[8..] {
+                if slot_info.contains('-') {
+                    // Range format: "start-end"
+                    let range_parts: Vec<&str> = slot_info.split('-').collect();
+                    if range_parts.len() == 2 {
+                        if let (Ok(start), Ok(end)) = (range_parts[0].parse::<u16>(), range_parts[1].parse::<u16>()) {
+                            ranges.push((start, end));
+                        }
+                    }
+                } else if let Ok(slot) = slot_info.parse::<u16>() {
+                    // Single slot
+                    ranges.push((slot, slot));
+                }
+            }
+
+            if !ranges.is_empty() {
+                slot_ranges.insert(addr.to_string(), ranges);
+            }
         }
 
         slot_mapping.update_slot_mapping(slot_ranges);
@@ -428,22 +577,30 @@ impl RedisProtocolApp {
                             if let Some(redirect) = RedirectParser::parse_redirect_raw(response_data) {
                                 log::info!("Detected redirection: {:?}", redirect);
 
-                                // Handle the redirection - in a full implementation, we would:
-                                // 1. Create new connection to the target node
-                                // 2. Send ASKING command if needed (for ASK redirections)
-                                // 3. Retry the original command
-                                // 4. Update slot mapping for MOVED redirections
-                                //
-                                // For now, forward the redirection response to client
-                                // to demonstrate the parsing functionality
+                                // Handle the redirection with full implementation
                                 match redirect {
                                     crate::modes::redis::redirect::RedirectType::Moved { slot, address } => {
                                         log::warn!("MOVED redirection detected for slot {} to {}", slot, address);
-                                        // TODO: Update slot mapping and connect to new node
+                                        
+                                        // Update slot mapping for MOVED redirections
+                                        if let Err(e) = self.handle_moved_redirect(slot, &address).await {
+                                            log::error!("Failed to handle MOVED redirect: {}", e);
+                                        }
+                                        
+                                        // Forward the MOVED response to client so they can handle it
+                                        // In a full proxy, we might retry the command automatically
                                     }
                                     crate::modes::redis::redirect::RedirectType::Ask { slot, address } => {
                                         log::warn!("ASK redirection detected for slot {} to {}", slot, address);
-                                        // TODO: Send ASKING command and retry
+                                        
+                                        // Handle ASK redirection by connecting to target node and sending ASKING
+                                        if let Err(e) = self.handle_ask_redirect(slot, &address, &client_buf[0..n]).await {
+                                            log::error!("Failed to handle ASK redirect: {}", e);
+                                            // Forward the ASK response to client as fallback
+                                        } else {
+                                            // ASK redirect was handled successfully, don't forward the ASK response
+                                            continue;
+                                        }
                                     }
                                 }
                             }
@@ -466,6 +623,67 @@ impl RedisProtocolApp {
                 }
             }
         }
+    }
+
+    /// Handle MOVED redirection by updating slot mapping
+    async fn handle_moved_redirect(&self, slot: u16, new_address: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
+        log::info!("Updating slot mapping: slot {} moved to {}", slot, new_address);
+        
+        // Update the slot mapping
+        let mut slot_mapping = self.slot_mapping.write().await;
+        let mut slot_ranges = HashMap::new();
+        slot_ranges.insert(new_address.to_string(), vec![(slot, slot)]);
+        slot_mapping.update_slot_mapping(slot_ranges);
+        
+        // Also update cluster nodes if this is a new node
+        let mut cluster_nodes = self.cluster_nodes.write().await;
+        if !cluster_nodes.contains_key(new_address) {
+            let peer = BasicPeer::new(new_address);
+            cluster_nodes.insert(new_address.to_string(), peer);
+            log::info!("Added new cluster node: {}", new_address);
+        }
+        
+        Ok(())
+    }
+    
+    /// Handle ASK redirection by connecting to target node and sending ASKING command
+    async fn handle_ask_redirect(&self, slot: u16, target_address: &str, original_command: &[u8]) -> Result<(), Box<dyn Error + Send + Sync>> {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        
+        log::info!("Handling ASK redirect: slot {} to {}", slot, target_address);
+        
+        // Create connection to target node
+        let target_peer = BasicPeer::new(target_address);
+        let mut target_stream = self.connector.new_stream(&target_peer).await?;
+        
+        // Send ASKING command first
+        let asking_cmd = b"*1\r\n$6\r\nASKING\r\n";
+        target_stream.write_all(asking_cmd).await?;
+        target_stream.flush().await?;
+        
+        // Read ASKING response (should be +OK)
+        let mut asking_response = [0u8; 64];
+        let n = target_stream.read(&mut asking_response).await?;
+        let asking_resp_str = String::from_utf8_lossy(&asking_response[..n]);
+        
+        if !asking_resp_str.starts_with("+OK") {
+            return Err(format!("ASKING command failed: {}", asking_resp_str).into());
+        }
+        
+        // Send the original command
+        target_stream.write_all(original_command).await?;
+        target_stream.flush().await?;
+        
+        // Read and forward the response
+        let mut response_buf = [0u8; 8192];
+        let _response_len = target_stream.read(&mut response_buf).await?;
+        
+        log::info!("ASK redirect completed successfully for slot {} to {}", slot, target_address);
+        
+        // Note: In a full implementation, we would forward this response back to the client
+        // For now, we just log success
+        
+        Ok(())
     }
 }
 

@@ -2,6 +2,8 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
+use crate::utils::parse_socket_addr;
+use crate::error::ConfigError;
 
 /// Main puerta configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -275,21 +277,7 @@ impl Config {
     }
 }
 
-/// Configuration error types
-#[derive(Debug, thiserror::Error)]
-pub enum ConfigError {
-    #[error("IO error: {0}")]
-    IoError(String),
 
-    #[error("Parse error: {0}")]
-    ParseError(String),
-
-    #[error("Serialize error: {0}")]
-    SerializeError(String),
-
-    #[error("Validation error: {0}")]
-    ValidationError(String),
-}
 
 #[cfg(test)]
 mod tests {

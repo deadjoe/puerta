@@ -8,14 +8,14 @@ license = "Apache-2.0"
 repository = "https://github.com/deadjoe/puerta"
 
 [dependencies]
-# Local development dependencies - uncomment after cloning Pingora to examples/
+# Local development dependencies - pingora framework
 # See DEV-SETUP.md for complete setup instructions
-#
-# For local development, uncomment these lines:
-# pingora = { path = "examples/pingora" }
-# pingora-core = { path = "examples/pingora/pingora-core" }  
-# pingora-load-balancing = { path = "examples/pingora/pingora-load-balancing" }
-#
+
+# For local development (enabled):
+pingora = { path = "examples/pingora/pingora" }
+pingora-core = { path = "examples/pingora/pingora-core" }  
+pingora-load-balancing = { path = "examples/pingora/pingora-load-balancing" }
+
 # For production builds, use crates.io versions when available:
 # pingora = "0.1"
 # pingora-core = "0.1" 
@@ -40,6 +40,8 @@ async-trait = "0.1"
 socket2 = "0.5"
 log = "0.4"
 env_logger = "0.11"
+sha2 = "0.10"
+hex = "0.4"
 
 # Redis redirection support (based on RCProxy)
 aho-corasick = "1.1"
@@ -48,8 +50,12 @@ lazy_static = "1.4"
 
 [dev-dependencies]
 tokio-test = "0.4"
-criterion = "0.5"
+criterion = { version = "0.5", features = ["html_reports"] }
 tempfile = "3.10"
+
+[[bench]]
+name = "performance"
+harness = false
 
 [[bench]]
 name = "load_balancing"

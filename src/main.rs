@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use log::info;
-use puerta::config::{Config, ConfigError};
+use puerta::config::Config;
+use puerta::error::ConfigError;
 use puerta::{ProxyMode, Puerta, PuertaConfig};
 use std::path::PathBuf;
 
