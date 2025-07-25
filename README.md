@@ -1,7 +1,5 @@
 <img src="./logo.png" alt="Puerta banner image" width="25%">
 
-# Puerta
-
 A high-performance, production-ready database cluster proxy for MongoDB Sharded Clusters and Redis Clusters. Built on Cloudflare's battle-tested Pingora framework with enterprise-grade reliability and performance.
 
 ## Overview
