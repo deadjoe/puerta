@@ -55,3 +55,4 @@ yarn-error.log*
 
 # Internal development documentation
 CLAUDE.md
+/docs/
