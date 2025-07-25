@@ -49,6 +49,9 @@ yarn-error.log*
 # Development tools
 .cargo/config
 
+# Internal documentation (should not be public)
+docs/
+
 # External dependencies/examples 
 /examples/pingora/
 /examples/rcproxy/
