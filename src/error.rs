@@ -3,7 +3,6 @@
 /// This module provides a comprehensive error type system that covers all
 /// error scenarios in the Puerta proxy, including network errors, protocol
 /// errors, configuration errors, and operational errors.
-
 use std::fmt;
 use std::io;
 use std::net::AddrParseError;
@@ -166,15 +165,15 @@ impl PuertaError {
 
     /// Check if this error is recoverable (can retry)
     pub fn is_recoverable(&self) -> bool {
-        match self {
-            PuertaError::Network(_) => true,
-            PuertaError::Backend { .. } => true,
-            PuertaError::HealthCheck { .. } => true,
-            PuertaError::Timeout { .. } => true,
-            PuertaError::Redis(RedisError::RedirectionError { .. }) => true,
-            PuertaError::Redis(RedisError::ClusterError { .. }) => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            PuertaError::Network(_) |
+            PuertaError::Backend { .. } |
+            PuertaError::HealthCheck { .. } |
+            PuertaError::Timeout { .. } |
+            PuertaError::Redis(RedisError::RedirectionError { .. }) |
+            PuertaError::Redis(RedisError::ClusterError { .. })
+        )
     }
 
     /// Get error severity level

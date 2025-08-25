@@ -158,47 +158,49 @@ impl MongoDBTcpProxy {
         self.mongodb_proxy.get_affinity_manager().session_count().await
     }
 
-    /// Select backend mongos based on session affinity and load balancing
-    /// Now uses the structured MongoDBProxy for routing decisions
+    /// Select backend mongos using Pingora's load balancer with session affinity
     async fn select_backend(
         &self,
         client_addr: &str,
     ) -> Result<BasicPeer, Box<dyn Error + Send + Sync>> {
-        // Parse client address to SocketAddr for MongoDBProxy
+        // Parse client address to SocketAddr
         let socket_addr: std::net::SocketAddr = client_addr.parse()
-            .map_err(|e| format!("Invalid client address {}: {}", client_addr, e))?;
+            .map_err(|e| format!("Invalid client address {client_addr}: {e}"))?;
         
-        // Use MongoDBProxy for routing decision
-        let routing_decision = self.mongodb_proxy.route_request(socket_addr).await;
-        
-        match routing_decision {
-            crate::modes::RoutingDecision::Route { backend_id } => {
-                // Get backend address from the backend pool
-                let backend_addr = {
-                    let backend_pool = self.mongodb_proxy.get_backends();
-                    let backends = backend_pool.read().await;
-                    if let Some(backend) = backends.get(&backend_id) {
-                        backend.addr.to_string()
-                    } else {
-                        return Err(format!("Backend {} not found in pool", backend_id).into());
-                    }
-                };
-                
-                log::info!(
-                    "Routed client {} to backend {}: {}",
-                    client_addr,
-                    backend_id,
-                    backend_addr
-                );
-                Ok(BasicPeer::new(&backend_addr))
-            }
-            crate::modes::RoutingDecision::Error { message } => {
-                Err(message.into())
-            }
-            _ => {
-                Err("Unexpected routing decision for MongoDB".into())
+        // Check session affinity first  
+        if let Some(backend_id) = self.mongodb_proxy
+            .get_affinity_manager()
+            .get_backend_for_client(socket_addr, &[])
+            .await
+        {
+            // If session affinity exists, try to use that backend
+            let backend_pool = self.mongodb_proxy.get_backends();
+            let backends = backend_pool.read().await;
+            if let Some(backend) = backends.get(&backend_id) {
+                if backend.healthy {
+                    log::info!("Using session affinity: client {client_addr} -> backend {backend_id}");
+                    return Ok(BasicPeer::new(&backend.addr.to_string()));
+                }
             }
         }
+        
+        // No session affinity or backend unhealthy, use Pingora load balancer
+        let upstream = self.load_balancer
+            .select(client_addr.as_bytes(), 256) // Use client address for consistent hashing
+            .ok_or("No healthy backends available")?;
+        
+        log::info!("Load balancer selected backend: {upstream:?} for client {client_addr}");
+        
+        // Create session affinity for new connection
+        let backend_addr = upstream.addr.to_string();
+        let backend_id = format!("mongos-{backend_addr}");
+        let available_backends = vec![backend_id.clone()];
+        let _ = self.mongodb_proxy
+            .get_affinity_manager()
+            .get_backend_for_client(socket_addr, &available_backends)
+            .await;
+        
+        Ok(BasicPeer::new(&backend_addr))
     }
 
     /// Clean up session affinity when client disconnects
@@ -241,17 +243,17 @@ impl MongoDBTcpProxy {
                         Ok(n) => {
                             bytes_transferred_to_mongos += n as u64;
                             if let Err(e) = mongos_stream.write_all(&client_buf[0..n]).await {
-                                log::error!("Failed to write {} bytes to mongos for client {}: {}", n, client_addr, e);
+                                log::error!("Failed to write {n} bytes to mongos for client {client_addr}: {e}");
                                 break;
                             }
                             if let Err(e) = mongos_stream.flush().await {
-                                log::error!("Failed to flush to mongos for client {}: {}", client_addr, e);
+                                log::error!("Failed to flush to mongos for client {client_addr}: {e}");
                                 break;
                             }
-                            log::trace!("Forwarded {} bytes from client {} to mongos", n, client_addr);
+                            log::trace!("Forwarded {n} bytes from client {client_addr} to mongos");
                         }
                         Err(e) => {
-                            log::error!("Failed to read from client {}: {}", client_addr, e);
+                            log::error!("Failed to read from client {client_addr}: {e}");
                             break;
                         }
                     }
@@ -266,17 +268,17 @@ impl MongoDBTcpProxy {
                         Ok(n) => {
                             bytes_transferred_to_client += n as u64;
                             if let Err(e) = client_stream.write_all(&mongos_buf[0..n]).await {
-                                log::error!("Failed to write {} bytes to client {}: {}", n, client_addr, e);
+                                log::error!("Failed to write {n} bytes to client {client_addr}: {e}");
                                 break;
                             }
                             if let Err(e) = client_stream.flush().await {
-                                log::error!("Failed to flush to client {}: {}", client_addr, e);
+                                log::error!("Failed to flush to client {client_addr}: {e}");
                                 break;
                             }
-                            log::trace!("Forwarded {} bytes from mongos to client {}", n, client_addr);
+                            log::trace!("Forwarded {n} bytes from mongos to client {client_addr}");
                         }
                         Err(e) => {
-                            log::error!("Failed to read from mongos for client {}: {}", client_addr, e);
+                            log::error!("Failed to read from mongos for client {client_addr}: {e}");
                             break;
                         }
                     }
@@ -285,10 +287,7 @@ impl MongoDBTcpProxy {
         }
 
         log::info!(
-            "Data forwarding completed for client {}: {} bytes to mongos, {} bytes to client",
-            client_addr,
-            bytes_transferred_to_mongos,
-            bytes_transferred_to_client
+            "Data forwarding completed for client {client_addr}: {bytes_transferred_to_mongos} bytes to mongos, {bytes_transferred_to_client} bytes to client"
         );
     }
 }
@@ -319,7 +318,7 @@ impl ServerApp for MongoDBTcpProxy {
         let backend_peer = match self.select_backend(&client_addr).await {
             Ok(peer) => peer,
             Err(e) => {
-                log::error!("Failed to select backend: {}", e);
+                log::error!("Failed to select backend: {e}");
                 return None;
             }
         };
@@ -385,18 +384,18 @@ impl Puerta {
         self.server.is_some()
     }
 
-    pub async fn run(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
+    pub fn run(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
         if self.server.is_none() {
             return Err("Server not initialized. Call initialize() first.".into());
         }
 
         match &self.config.proxy_mode {
-            ProxyMode::MongoDB { .. } => self.run_mongodb_mode().await,
-            ProxyMode::Redis { .. } => self.run_redis_mode().await,
+            ProxyMode::MongoDB { .. } => self.run_mongodb_mode(),
+            ProxyMode::Redis { .. } => self.run_redis_mode(),
         }
     }
 
-    async fn run_mongodb_mode(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn run_mongodb_mode(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
         log::info!("Starting Puerta in MongoDB TCP proxy mode using Pingora framework");
 
         let mut server = self.server.take().unwrap();
@@ -418,7 +417,7 @@ impl Puerta {
             300,
             self.config.health_check_interval_ms / 1000,
         )
-        .map_err(|e| format!("Invalid MongoDB configuration: {}", e))?;
+        .map_err(|e| format!("Invalid MongoDB configuration: {e}"))?;
 
         // Create Pingora load balancer with mongos endpoints
         let mut upstreams =
@@ -439,8 +438,8 @@ impl Puerta {
         let load_balancer = background.task();
 
         // Create MongoDB TCP proxy service
-        let mongodb_proxy = MongoDBTcpProxy::new(load_balancer, mongodb_config).await
-            .map_err(|e| format!("Failed to create MongoDB proxy: {}", e))?;
+        let mongodb_proxy = futures::executor::block_on(MongoDBTcpProxy::new(load_balancer, mongodb_config))
+            .map_err(|e| format!("Failed to create MongoDB proxy: {e}"))?;
 
         // Create TCP listening service for MongoDB Wire Protocol
         let tcp_service = Service::with_listeners(
@@ -457,13 +456,13 @@ impl Puerta {
             "MongoDB TCP proxy listening on: {}",
             self.config.listen_addr
         );
-        log::info!("Proxying to mongos endpoints: {:?}", mongos_endpoints);
+        log::info!("Proxying to mongos endpoints: {mongos_endpoints:?}");
 
         // Run the server (consume ownership)
         server.run_forever();
     }
 
-    async fn run_redis_mode(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn run_redis_mode(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
         log::info!("Starting Puerta in Redis mode using RCProxy architecture");
 
         // Extract Redis configuration
@@ -485,7 +484,7 @@ impl Puerta {
 
         let server = self.server.take().unwrap();
         let redis_proxy = RedisClusterProxy::new(redis_config, server).with_health_check();
-        redis_proxy.run_redis_proxy().await
+        futures::executor::block_on(redis_proxy.run_redis_proxy())
     }
 }
 
@@ -673,9 +672,8 @@ mod tests {
 
         let mut puerta = Puerta::new(config);
 
-        // This test requires tokio runtime
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        let result = rt.block_on(async { puerta.run().await });
+        // The run method is synchronous, no need for runtime
+        let result = puerta.run();
 
         assert!(result.is_err());
         assert_eq!(

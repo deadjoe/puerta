@@ -65,7 +65,7 @@ impl MongoDBHealthChecker {
             Ok(stream) => stream,
             Err(e) => {
                 return HealthStatus::Unhealthy {
-                    reason: format!("Connection failed: {}", e),
+                    reason: format!("Connection failed: {e}"),
                 };
             }
         };
@@ -78,7 +78,7 @@ impl MongoDBHealthChecker {
         // Send ismaster command
         if let Err(e) = stream.write_all(&ismaster_command).await {
             return HealthStatus::Unhealthy {
-                reason: format!("Failed to send ismaster command: {}", e),
+                reason: format!("Failed to send ismaster command: {e}"),
             };
         }
         
@@ -86,16 +86,16 @@ impl MongoDBHealthChecker {
         let mut header = [0u8; 16];
         if let Err(e) = stream.read_exact(&mut header).await {
             return HealthStatus::Unhealthy {
-                reason: format!("Failed to read response header: {}", e),
+                reason: format!("Failed to read response header: {e}"),
             };
         }
         
         // Parse message length from header (first 4 bytes, little-endian)
         let message_length = u32::from_le_bytes([header[0], header[1], header[2], header[3]]) as usize;
         
-        if message_length < 16 || message_length > 48 * 1024 * 1024 {
+        if !(16..=48 * 1024 * 1024).contains(&message_length) {
             return HealthStatus::Unhealthy {
-                reason: format!("Invalid message length: {}", message_length),
+                reason: format!("Invalid message length: {message_length}"),
             };
         }
         
@@ -104,7 +104,7 @@ impl MongoDBHealthChecker {
         let mut body = vec![0u8; body_length];
         if let Err(e) = stream.read_exact(&mut body).await {
             return HealthStatus::Unhealthy {
-                reason: format!("Failed to read response body: {}", e),
+                reason: format!("Failed to read response body: {e}"),
             };
         }
         

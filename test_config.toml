@@ -1,0 +1,10 @@
+# Test configuration for Puerta MongoDB proxy
+listen_addr = "127.0.0.1:27018"
+max_connections = 1000
+health_check_interval_ms = 5000
+
+[proxy]
+mode = "mongodb"
+mongos_endpoints = ["127.0.0.1:27017"]  # Using the available MongoDB instance
+session_affinity_enabled = true
+session_timeout_sec = 3600

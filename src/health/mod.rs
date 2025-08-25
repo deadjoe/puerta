@@ -5,7 +5,6 @@ pub mod redis;
 use crate::core::{Backend, BackendMetadata};
 use std::time::{Duration, SystemTime};
 use tokio::time::timeout;
-use async_trait::async_trait;
 use std::fmt;
 
 /// Health status of a backend
@@ -105,8 +104,7 @@ impl HealthCheckManager {
 mod tests {
     use super::*;
     use crate::core::{Backend, BackendMetadata};
-    use crate::health::mongodb::MongoDBHealthChecker;
-    use std::net::SocketAddr;
+      use std::net::SocketAddr;
     use std::time::{Duration, SystemTime};
     use async_trait::async_trait;
 
@@ -170,7 +168,7 @@ mod tests {
     #[tokio::test]
     async fn test_health_check_manager_creation() {
         let checker = Box::new(MockHealthChecker { should_pass: true });
-        let manager = HealthCheckManager::new(checker);
+        let _manager = HealthCheckManager::new(checker);
         // Just verify the manager was created successfully
         assert!(true);
     }

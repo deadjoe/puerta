@@ -1,5 +1,5 @@
 /// Session affinity management for MongoDB connections
-use std::collections::HashMap;
+use fnv::FnvHashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -51,7 +51,7 @@ pub struct ClientSession {
 /// Ensures that the same client always connects to the same mongos
 /// Now supports multiple client identification strategies for NAT-friendly operation
 pub struct AffinityManager {
-    sessions: Arc<RwLock<HashMap<ClientIdentifier, ClientSession>>>,
+    sessions: Arc<RwLock<FnvHashMap<ClientIdentifier, ClientSession>>>,
     session_timeout: Duration,
     identification_strategy: ClientIdentificationStrategy,
 }
@@ -72,7 +72,7 @@ pub enum ClientIdentificationStrategy {
 impl AffinityManager {
     pub fn new(session_timeout: Duration) -> Self {
         Self {
-            sessions: Arc::new(RwLock::new(HashMap::new())),
+            sessions: Arc::new(RwLock::new(FnvHashMap::default())),
             session_timeout,
             identification_strategy: ClientIdentificationStrategy::Adaptive,
         }
@@ -80,7 +80,7 @@ impl AffinityManager {
     
     pub fn with_strategy(session_timeout: Duration, strategy: ClientIdentificationStrategy) -> Self {
         Self {
-            sessions: Arc::new(RwLock::new(HashMap::new())),
+            sessions: Arc::new(RwLock::new(FnvHashMap::default())),
             session_timeout,
             identification_strategy: strategy,
         }
@@ -289,7 +289,7 @@ impl AffinityManager {
         let sessions = self.sessions.read().await;
         let total_sessions = sessions.len();
 
-        let mut backend_counts = HashMap::new();
+        let mut backend_counts = FnvHashMap::default();
         let mut total_connections = 0;
 
         for session in sessions.values() {
@@ -326,7 +326,7 @@ impl AffinityManager {
 pub struct AffinityStatistics {
     pub total_sessions: usize,
     pub total_connections: u64,
-    pub backend_distribution: HashMap<String, usize>,
+    pub backend_distribution: FnvHashMap<String, usize>,
 }
 
 impl Default for AffinityManager {
@@ -358,8 +358,8 @@ mod tests {
             .await;
         assert_eq!(backend2, Some("backend1".to_string())); // Should still be backend1
 
-        // Verify session was created
-        let client_id = ClientIdentifier::SocketAddr(client_addr);
+        // Verify session was created (using the same identifier strategy)
+        let client_id = manager.generate_client_identifier(client_addr, None);
         let session = manager.get_client_session(&client_id).await;
         assert!(session.is_some());
         assert_eq!(session.unwrap().backend_id, "backend1");

@@ -213,25 +213,72 @@ impl MongoDBProxy {
     /// Start health checking for all backends
     pub async fn start_health_checks(&self) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(health_manager) = &self.health_manager {
-            let backends = self.backends.clone();
+            // Start health checks in a separate task to avoid runtime conflicts
             let health_manager = Arc::clone(health_manager);
-
-            tokio::spawn(async move {
+            let backends = Arc::clone(&self.backends);
+            let config_interval = self.config.health_check_interval_sec;
+            
+            // Start health checks in a separate thread with its own runtime to avoid conflicts with Pingora
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on(async move {
+                log::info!("Starting MongoDB health check background task");
+                let mut interval = tokio::time::interval(
+                    tokio::time::Duration::from_secs(config_interval)
+                );
+                
                 loop {
+                    interval.tick().await;
+                    
+                    // Get all backends to check
+                    let backend_list = {
+                        let backends = backends.read().await;
+                        backends.values().cloned().collect::<Vec<_>>()
+                    };
+                    
+                    if backend_list.is_empty() {
+                        continue;
+                    }
+                    
+                    // Check health of all backends concurrently
+                    let health_checks: Vec<_> = backend_list.iter().map(|backend| {
+                        let health_manager = Arc::clone(&health_manager);
+                        let backend = backend.clone();
+                        async move {
+                            let mut backend_clone = backend.clone();
+                            let status = health_manager.check_backend_health(&mut backend_clone).await;
+                            (backend.id.clone(), status)
+                        }
+                    }).collect();
+                    
+                    let results = futures::future::join_all(health_checks).await;
+                    
+                    // Update backend health status
                     {
-                        let mut backends_guard = backends.write().await;
-                        for backend in backends_guard.values_mut() {
-                            let status = health_manager.check_backend_health(backend).await;
-                            log::debug!("Health check for {}: {:?}", backend.id, status);
+                        let mut backends_mut = backends.write().await;
+                        for (backend_id, status) in results {
+                            if let Some(backend) = backends_mut.get_mut(&backend_id) {
+                                let was_healthy = backend.healthy;
+                                backend.healthy = status.is_healthy();
+                                
+                                if was_healthy != backend.healthy {
+                                    if backend.healthy {
+                                        log::info!("Backend {backend_id} is now healthy");
+                                    } else {
+                                        log::warn!("Backend {backend_id} is now unhealthy: {status}");
+                                    }
+                                }
+                            }
                         }
                     }
-
-                    // Sleep between health check cycles
-                    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
                 }
-            });
+            })});
+            
+            log::info!("MongoDB health check system started successfully");
+        } else {
+            log::warn!("Health manager not configured, skipping health checks");
         }
-
+        
         Ok(())
     }
 

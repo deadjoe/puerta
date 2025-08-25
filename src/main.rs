@@ -47,13 +47,12 @@ enum Commands {
     Version,
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), String> {
     let cli = Cli::parse();
 
     match cli.command {
         Commands::Run { config } => {
-            run_puerta(config).await?;
+            run_puerta(config)?;
         }
         Commands::Config { mode, output } => {
             generate_config(mode, output)?;
@@ -69,13 +68,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn run_puerta(config_path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+fn run_puerta(config_path: PathBuf) -> Result<(), String> {
     // Load configuration
     let config = Config::load_from_file(&config_path)
         .map_err(|e| format!("Failed to load config from {:?}: {}", config_path, e))?;
 
     // Initialize logging
-    init_logging(&config)?;
+    init_logging(&config).map_err(|e| format!("Failed to initialize logging: {}", e))?;
 
     info!(
         "Starting puerta v{} with Pingora framework",
@@ -120,14 +119,15 @@ async fn run_puerta(config_path: PathBuf) -> Result<(), Box<dyn std::error::Erro
         .map_err(|e| format!("Failed to initialize Puerta: {}", e))?;
 
     info!("Puerta initialized with Pingora framework, starting server...");
-    if let Err(e) = puerta.run().await {
-        return Err(format!("Failed to run puerta: {}", e).into());
-    }
-
+    
+    // Run Puerta - this will block forever
+    puerta.run().map_err(|e| format!("Failed to run puerta: {}", e))?;
+    
+    // This code should never be reached
     Ok(())
 }
 
-fn generate_config(mode: String, output: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+fn generate_config(mode: String, output: PathBuf) -> Result<(), String> {
     println!("Generating {} configuration file: {:?}", mode, output);
 
     Config::create_example_config(&output, &mode)
@@ -140,7 +140,7 @@ fn generate_config(mode: String, output: PathBuf) -> Result<(), Box<dyn std::err
     Ok(())
 }
 
-fn validate_config(config_path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+fn validate_config(config_path: PathBuf) -> Result<(), String> {
     println!("Validating configuration file: {:?}", config_path);
 
     match Config::load_from_file(&config_path) {
@@ -178,7 +178,7 @@ fn validate_config(config_path: PathBuf) -> Result<(), Box<dyn std::error::Error
                 ConfigError::ValidationError(msg) => eprintln!("  Validation error: {}", msg),
                 ConfigError::SerializeError(msg) => eprintln!("  Serialization error: {}", msg),
             }
-            return Err(Box::new(e));
+            return Err(e.to_string());
         }
     }
 

@@ -436,39 +436,96 @@ impl RedisProtocolApp {
         }
     }
 
-    /// Parse Redis command from raw data
+    /// Parse Redis command from raw data using complete RESP parser
     pub async fn parse_redis_command(
         &self,
         data: &[u8],
     ) -> Result<RedisCommand, Box<dyn Error + Send + Sync>> {
-        // Basic RESP parsing - this would be more sophisticated in practice
-        let cmd_str = String::from_utf8_lossy(data);
-
-        // Extract command and key for slot calculation
-        // This is a simplified parser - would need full RESP implementation
-        if cmd_str.starts_with("*") {
-            let parts: Vec<&str> = cmd_str.lines().collect();
-            if parts.len() >= 4 {
-                let command = parts[2].to_uppercase();
-                let key = if parts.len() >= 6 {
-                    Some(parts[5].to_string())
-                } else {
-                    None
+        use crate::modes::redis::resp::{RespParser, RespValue};
+        use bytes::Bytes;
+        
+        let mut buf = bytes::BytesMut::from(data);
+        
+        match RespParser::parse(&mut buf)? {
+            Some(RespValue::Array(Some(elements))) => {
+                if elements.is_empty() {
+                    return Err("Empty command array".into());
+                }
+                
+                // First element should be the command
+                let command = match &elements[0] {
+                    RespValue::BulkString(Some(cmd_bytes)) => {
+                        String::from_utf8_lossy(cmd_bytes).to_uppercase()
+                    }
+                    RespValue::SimpleString(cmd_str) => cmd_str.to_uppercase(),
+                    _ => return Err("Invalid command format".into()),
                 };
+                
+                // Extract arguments
+                let mut args = Vec::new();
+                let mut key: Option<String> = None;
+                
+                for (i, element) in elements.iter().skip(1).enumerate() {
+                    match element {
+                        RespValue::BulkString(Some(arg_bytes)) => {
+                            let arg_str = String::from_utf8_lossy(arg_bytes).to_string();
+                            args.push(Bytes::from(arg_str.clone()));
+                            
+                            // First argument is typically the key for most commands
+                            if i == 0 && Self::command_has_key(&command) {
+                                key = Some(arg_str);
+                            }
+                        }
+                        RespValue::SimpleString(arg_str) => {
+                            args.push(Bytes::from(arg_str.clone()));
+                            if i == 0 && Self::command_has_key(&command) {
+                                key = Some(arg_str.clone());
+                            }
+                        }
+                        RespValue::Integer(num) => {
+                            let arg_str = num.to_string();
+                            args.push(Bytes::from(arg_str));
+                        }
+                        _ => {
+                            // Skip other types for now
+                        }
+                    }
+                }
+                
                 let slot = key.as_ref().map(|k| SlotMapping::calculate_slot(k));
                 let readonly = Self::is_readonly_command(&command);
-
-                return Ok(RedisCommand {
+                
+                Ok(RedisCommand {
                     command,
-                    args: vec![],
+                    args,
                     key,
                     slot,
                     readonly,
-                });
+                })
+            }
+            Some(RespValue::Array(None)) => {
+                Err("NULL command array".into())
+            }
+            Some(_) => {
+                Err("Expected array command".into())
+            }
+            None => {
+                Err("Incomplete command data".into())
             }
         }
-
-        Err("Failed to parse Redis command".into())
+    }
+    
+    /// Check if a command typically has a key as first argument
+    fn command_has_key(command: &str) -> bool {
+        matches!(
+            command.to_uppercase().as_str(),
+            "GET" | "SET" | "DEL" | "EXISTS" | "TTL" | "PTTL" | "TYPE" |
+            "STRLEN" | "APPEND" | "INCR" | "DECR" | "INCRBY" | "DECRBY" |
+            "LPUSH" | "RPUSH" | "LPOP" | "RPOP" | "LLEN" | "LRANGE" | "LINDEX" |
+            "SADD" | "SREM" | "SCARD" | "SMEMBERS" | "SISMEMBER" |
+            "HSET" | "HGET" | "HDEL" | "HEXISTS" | "HLEN" | "HGETALL" | "HKEYS" | "HVALS" |
+            "ZADD" | "ZREM" | "ZCARD" | "ZCOUNT" | "ZRANGE" | "ZRANK" | "ZSCORE"
+        )
     }
 
     /// Check if a Redis command is read-only

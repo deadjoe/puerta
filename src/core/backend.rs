@@ -1,11 +1,11 @@
 /// Backend service management
 use crate::core::Backend;
-use std::collections::HashMap;
+use fnv::FnvHashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Backend pool for managing multiple backend services
-pub type BackendPool = Arc<RwLock<HashMap<String, Backend>>>;
+pub type BackendPool = Arc<RwLock<FnvHashMap<String, Backend>>>;
 
 /// Backend manager for operations on backend services
 pub struct BackendManager {
@@ -15,7 +15,7 @@ pub struct BackendManager {
 impl BackendManager {
     pub fn new() -> Self {
         Self {
-            backends: Arc::new(RwLock::new(HashMap::new())),
+            backends: Arc::new(RwLock::new(FnvHashMap::default())),
         }
     }
 

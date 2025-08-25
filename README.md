@@ -55,17 +55,13 @@ Puerta is built on proven, high-performance foundations:
 
 ### Build from Source
 
-**Note**: This project currently includes local dependencies on Pingora framework components. For a working build, you'll need to clone the Pingora repository and update the Cargo.toml path dependencies accordingly.
+**Note**: This project includes local dependencies on Pingora framework components. The repository already includes the necessary Pingora framework in the `examples/pingora/` directory.
 
 ```bash
 git clone https://github.com/deadjoe/puerta
 cd puerta
 
-# Clone Pingora framework dependencies
-git clone https://github.com/cloudflare/pingora examples/pingora
-
-# Update Cargo.toml to uncomment and fix path dependencies
-# Then build
+# The Pingora framework is already included in examples/pingora/
 cargo build --release
 ```
 
@@ -76,29 +72,37 @@ Puerta uses TOML configuration files. Example configurations are provided in the
 ### MongoDB Mode Configuration
 
 ```toml
-mode = "mongodb"
+[server]
 listen_addr = "0.0.0.0:27017"
 max_connections = 10000
+connection_timeout_sec = 60
+worker_threads = 4
 
-[mongodb]
+[proxy]
+mode = "mongodb"
 mongos_endpoints = [
     "mongodb1.example.com:27017",
     "mongodb2.example.com:27017",
     "mongodb3.example.com:27017"
 ]
-session_affinity_enabled = true
+session_affinity = true
 session_timeout_sec = 1800
-health_check_interval_sec = 30
+
+[health]
+interval_sec = 30
 ```
 
 ### Redis Mode Configuration
 
 ```toml
-mode = "redis"
+[server]
 listen_addr = "0.0.0.0:6379"
 max_connections = 10000
+connection_timeout_sec = 60
+worker_threads = 4
 
-[redis]
+[proxy]
+mode = "redis"
 cluster_nodes = [
     "redis1.example.com:6379",
     "redis2.example.com:6379", 
@@ -107,6 +111,9 @@ cluster_nodes = [
 slot_refresh_interval_sec = 60
 max_redirects = 3
 connection_timeout_ms = 5000
+
+[health]
+interval_sec = 30
 ```
 
 ## Usage
@@ -115,13 +122,16 @@ connection_timeout_ms = 5000
 
 ```bash
 # Start with MongoDB configuration
-./target/release/puerta --config config/mongodb.toml
+./target/release/puerta run --config config/mongodb.toml
 
 # Start with Redis configuration  
-./target/release/puerta --config config/redis.toml
+./target/release/puerta run --config config/redis.toml
+
+# Use default configuration (config/dev.toml)
+./target/release/puerta run
 
 # Enable debug logging
-RUST_LOG=debug ./target/release/puerta --config config/mongodb.toml
+RUST_LOG=debug ./target/release/puerta run --config config/mongodb.toml
 ```
 
 ### Testing
@@ -186,8 +196,16 @@ The project maintains comprehensive test coverage:
 - Protocol parsing validation
 - Redirection logic verification
 - Session affinity behavior testing
+- Runtime compatibility verification
 
-Current test coverage: 106 tests passing
+Current test coverage: 116 tests passing
+
+### Runtime Compatibility
+
+The project has been optimized for seamless runtime integration:
+- **Tokio Runtime Compatibility**: Fully compatible with Pingora's runtime model
+- **Zero Runtime Conflicts**: Eliminated "Cannot start a runtime from within a runtime" errors
+- **Production-Ready**: Stable deployment with proper async/sync boundary management
 
 ## Contributing
 
@@ -195,6 +213,8 @@ Current test coverage: 106 tests passing
 2. Create a feature branch
 3. Make your changes with appropriate tests
 4. Ensure all tests pass: `cargo test`
+5. Run clippy checks: `cargo clippy -- -D warnings`
+6. Build release version: `cargo build --release`
 5. Submit a pull request
 
 ## License

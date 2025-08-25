@@ -1,19 +1,19 @@
 /// Frontend connection management
 use crate::core::Frontend;
-use std::collections::HashMap;
+use fnv::FnvHashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Frontend connection manager
 pub struct FrontendManager {
-    connections: Arc<RwLock<HashMap<String, Frontend>>>,
+    connections: Arc<RwLock<FnvHashMap<String, Frontend>>>,
 }
 
 impl FrontendManager {
     pub fn new() -> Self {
         Self {
-            connections: Arc::new(RwLock::new(HashMap::new())),
+            connections: Arc::new(RwLock::new(FnvHashMap::default())),
         }
     }
 

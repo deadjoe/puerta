@@ -2,7 +2,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
-use crate::utils::parse_socket_addr;
 use crate::error::ConfigError;
 
 /// Main puerta configuration
@@ -164,8 +163,7 @@ impl Config {
                 for endpoint in mongos_endpoints {
                     endpoint.parse::<std::net::SocketAddr>().map_err(|_| {
                         ConfigError::ValidationError(format!(
-                            "Invalid mongos endpoint: {}",
-                            endpoint
+                            "Invalid mongos endpoint: {endpoint}"
                         ))
                     })?;
                 }
@@ -183,7 +181,7 @@ impl Config {
 
                 for node in cluster_nodes {
                     node.parse::<std::net::SocketAddr>().map_err(|_| {
-                        ConfigError::ValidationError(format!("Invalid Redis node: {}", node))
+                        ConfigError::ValidationError(format!("Invalid Redis node: {node}"))
                     })?;
                 }
 

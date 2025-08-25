@@ -1,5 +1,5 @@
 /// Session management for connection affinity
-use std::collections::HashMap;
+use fnv::FnvHashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -17,14 +17,14 @@ pub struct Session {
 
 /// Session manager for tracking client-backend affinity
 pub struct SessionManager {
-    sessions: Arc<RwLock<HashMap<SocketAddr, Session>>>,
+    sessions: Arc<RwLock<FnvHashMap<SocketAddr, Session>>>,
     session_timeout: Duration,
 }
 
 impl SessionManager {
     pub fn new(session_timeout: Duration) -> Self {
         Self {
-            sessions: Arc::new(RwLock::new(HashMap::new())),
+            sessions: Arc::new(RwLock::new(FnvHashMap::default())),
             session_timeout,
         }
     }
