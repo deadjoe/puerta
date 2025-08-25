@@ -1,16 +1,37 @@
 #!/bin/bash
 
-# MongoDB Load Balancer Test Script
-# Tests connectivity and load balancing across MongoDB routers
+# MongoDB Load Balancer Basic Test Script
+# Tests basic connectivity and load balancing functionality
+# 
+# Usage: ./test_mongodb_lb_basic.sh
+# Output: Console output with test results
+# Duration: ~15-30 seconds
+
+set -e  # Exit on any error
+
+# Configuration
+LOAD_BALANCER_HOST="127.0.0.1"
+LOAD_BALANCER_PORT="27016"
+TEST_DB_PREFIX="puerta_test"
+
+# Cleanup function
+cleanup() {
+    if [ -n "$test_db" ]; then
+        mongosh --host "$LOAD_BALANCER_HOST" --port "$LOAD_BALANCER_PORT" --eval "db.getSiblingDB('$test_db').dropDatabase()" --quiet > /dev/null 2>&1 || true
+    fi
+}
+
+# Handle script interruption
+trap cleanup EXIT
 
 echo "=== MongoDB Load Balancer Test ==="
-echo "Testing Puerta load balancer at 127.0.0.1:27018"
-echo "Backend routers: 127.0.0.1:27020, 127.0.0.1:27021, 127.0.0.1:27022"
+echo "Testing Puerta load balancer at 127.0.0.1:27016"
+echo "Backend routers: 127.0.0.1:27017, 127.0.0.1:27018, 127.0.0.1:27019"
 echo ""
 
 # Test 1: Basic connectivity
 echo "1. Testing basic connectivity..."
-mongosh --host 127.0.0.1 --port 27018 --eval "db.adminCommand('ping')" --quiet > /dev/null
+mongosh --host "$LOAD_BALANCER_HOST" --port "$LOAD_BALANCER_PORT" --eval "db.adminCommand('ping')" --quiet > /dev/null
 if [ $? -eq 0 ]; then
     echo "✅ Load balancer connectivity: SUCCESS"
 else
@@ -23,8 +44,8 @@ echo ""
 echo "2. Testing load balancing with 10 connections..."
 connection_ids=()
 for i in {1..10}; do
-    output=$(mongosh --host 127.0.0.1 --port 27018 --eval "db.adminCommand('ismaster')" --quiet)
-    conn_id=$(echo "$output" | grep -o '"connectionId":[0-9]*' | cut -d':' -f2)
+    output=$(mongosh --host "$LOAD_BALANCER_HOST" --port "$LOAD_BALANCER_PORT" --eval "db.adminCommand('ismaster')" --quiet)
+    conn_id=$(echo "$output" | grep -o 'connectionId: [0-9]*' | cut -d':' -f2 | tr -d ' ')
     connection_ids+=($conn_id)
     echo "   Connection $i: connectionId $conn_id"
 done
@@ -32,7 +53,7 @@ done
 # Test 3: Verify all connections are unique (indicating load balancing)
 echo ""
 echo "3. Analyzing load balancing..."
-unique_ids=($(echo "${connection_ids[@]}" | tr ' ' '\n' | sort -u))
+unique_ids=($(printf "%s\n" "${connection_ids[@]}" | sort -u))
 total_connections=${#connection_ids[@]}
 unique_connections=${#unique_ids[@]}
 
@@ -48,8 +69,8 @@ fi
 # Test 4: Test basic MongoDB operations
 echo ""
 echo "4. Testing MongoDB operations..."
-test_db="puerta_test_$$"
-mongosh --host 127.0.0.1 --port 27018 --eval "
+test_db="${TEST_DB_PREFIX}_${$: -4}"
+mongosh --host "$LOAD_BALANCER_HOST" --port "$LOAD_BALANCER_PORT" --eval "
 use('$test_db');
 db.test_collection.insertOne({test: 'data', timestamp: new Date()});
 db.test_collection.findOne();
@@ -61,8 +82,7 @@ else
     echo "❌ MongoDB operations: FAILED"
 fi
 
-# Cleanup
-mongosh --host 127.0.0.1 --port 27018 --eval "db.getSiblingDB('$test_db').dropDatabase()" --quiet > /dev/null
+# Cleanup is handled by trap function
 
 echo ""
 echo "=== Test Summary ==="

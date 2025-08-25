@@ -1,8 +1,8 @@
 # Puerta MongoDB Load Balancer Configuration
-# Testing against local MongoDB cluster: localhost:27020,27021,27022
+# Testing against local MongoDB cluster: localhost:27017,27018,27019
 
 [server]
-listen_addr = "0.0.0.0:27018"
+listen_addr = "0.0.0.0:27016"
 max_connections = 1000
 connection_timeout_sec = 30
 worker_threads = 4
@@ -10,9 +10,9 @@ worker_threads = 4
 [proxy]
 mode = "mongodb"
 mongos_endpoints = [
-    "127.0.0.1:27020",
-    "127.0.0.1:27021", 
-    "127.0.0.1:27022"
+    "127.0.0.1:27017",
+    "127.0.0.1:27018", 
+    "127.0.0.1:27019"
 ]
 session_affinity = true
 session_timeout_sec = 1800
