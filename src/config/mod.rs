@@ -28,6 +28,23 @@ pub struct ServerConfig {
     pub connection_timeout_sec: u64,
     /// Number of worker threads
     pub worker_threads: Option<usize>,
+    /// Daemon mode configuration
+    pub daemon: Option<DaemonConfig>,
+}
+
+/// Daemon mode configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DaemonConfig {
+    /// Enable daemon mode
+    pub enabled: bool,
+    /// PID file path
+    pub pid_file: Option<String>,
+    /// Error log file path for daemon mode
+    pub error_log: Option<String>,
+    /// User to run as (for privilege dropping)
+    pub user: Option<String>,
+    /// Group to run as (for privilege dropping)
+    pub group: Option<String>,
 }
 
 /// Proxy mode configuration
@@ -90,6 +107,7 @@ impl Default for Config {
                 max_connections: 10000,
                 connection_timeout_sec: 60,
                 worker_threads: None, // Use system default
+                daemon: None, // Daemon mode disabled by default
             },
             proxy: ProxyConfig::MongoDB {
                 mongos_endpoints: vec!["127.0.0.1:27017".to_string()],

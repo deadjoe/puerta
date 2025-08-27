@@ -2,23 +2,31 @@
 # This configuration enables session-aware load balancing across multiple mongos instances
 
 [server]
-listen_addr = "0.0.0.0:8080"
+listen_addr = "0.0.0.0:27016"
 max_connections = 10000
-connection_timeout_sec = 60
+connection_timeout_sec = 30
 worker_threads = 4  # Optional: defaults to number of CPU cores
+
+# Optional daemon mode configuration
+# [server.daemon]
+# enabled = true                    # Set to true to run as daemon
+# pid_file = "/var/run/puerta.pid"  # PID file path
+# error_log = "/var/log/puerta/error.log"  # Error log file
+# user = "puerta"                   # User to run as (optional)
+# group = "puerta"                  # Group to run as (optional)
 
 [proxy]
 mode = "mongodb"
 # List of mongos instances to load balance across
 mongos_endpoints = [
-    "10.0.1.10:27017",
-    "10.0.1.11:27017", 
-    "10.0.1.12:27017"
+    "127.0.0.1:27017",
+    "127.0.0.1:27018", 
+    "127.0.0.1:27019"
 ]
 # Enable session affinity - CRITICAL for MongoDB cursor consistency
 session_affinity = true
 # Session timeout in seconds
-session_timeout_sec = 3600
+session_timeout_sec = 1800
 
 [health]
 # Health check interval in seconds
@@ -31,7 +39,7 @@ failure_threshold = 3
 success_threshold = 2
 
 [logging]
-level = "info"
+level = "debug"
 format = "text"
 stdout = true
 # Optional: log to file

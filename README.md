@@ -33,6 +33,8 @@ Puerta provides intelligent database cluster proxying with advanced session mana
 - **Connection Optimization**: Efficient connection pooling and reuse
 
 ### 🛡️ Enterprise Features
+- **Production Deployment**: Daemon mode with PID management and service integration
+- **Zero-Downtime Operations**: Graceful reload and upgrade capabilities
 - **Unified Error Handling**: Comprehensive error classification and recovery strategies
 - **Health Check System**: Configurable health monitoring with Wire Protocol validation
 - **Observability**: Structured logging, metrics collection, and performance monitoring
@@ -78,6 +80,14 @@ max_connections = 10000
 connection_timeout_sec = 60
 worker_threads = 4
 
+# Optional daemon mode configuration
+[server.daemon]
+enabled = true                    # Enable daemon mode
+pid_file = "/var/run/puerta.pid"  # PID file path
+error_log = "/var/log/puerta/error.log"  # Error log file
+user = "puerta"                   # User to run as (optional)
+group = "puerta"                  # Group to run as (optional)
+
 [proxy]
 mode = "mongodb"
 mongos_endpoints = [
@@ -120,6 +130,8 @@ interval_sec = 30
 
 ### Running Puerta
 
+#### Basic Usage
+
 ```bash
 # Start with MongoDB configuration
 ./target/release/puerta run --config config/mongodb.toml
@@ -132,6 +144,40 @@ interval_sec = 30
 
 # Enable debug logging
 RUST_LOG=debug ./target/release/puerta run --config config/mongodb.toml
+```
+
+#### Production Deployment (Daemon Mode)
+
+```bash
+# Run as daemon process
+./target/release/puerta run --config config/mongodb.toml --daemon
+
+# Run as daemon with custom PID file and error log
+./target/release/puerta run --config config/mongodb.toml \
+    --daemon \
+    --pid-file /var/run/puerta.pid \
+    --error-log /var/log/puerta/error.log
+
+# Test configuration without starting
+./target/release/puerta run --config config/mongodb.toml --test
+
+# Enable upgrade mode for zero-downtime updates
+./target/release/puerta run --config config/mongodb.toml --upgrade
+```
+
+#### Command Line Options
+
+```bash
+# View all available options
+./target/release/puerta run --help
+
+# Available options:
+#   -c, --config <CONFIG>        Path to configuration file
+#   -d, --daemon                 Run as daemon process in the background
+#   -p, --pid-file <PID_FILE>    PID file path for daemon mode
+#   -e, --error-log <ERROR_LOG>  Error log file path for daemon mode
+#   -t, --test                   Test configuration and exit
+#   -u, --upgrade                Enable upgrade mode for zero-downtime updates
 ```
 
 ### Testing

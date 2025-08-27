@@ -27,6 +27,21 @@ enum Commands {
         /// Path to configuration file
         #[arg(short, long, default_value = "config/dev.toml")]
         config: PathBuf,
+        /// Run as daemon process in the background
+        #[arg(short, long)]
+        daemon: bool,
+        /// PID file path for daemon mode
+        #[arg(short, long, default_value = "/tmp/puerta.pid")]
+        pid_file: PathBuf,
+        /// Error log file path for daemon mode
+        #[arg(short, long)]
+        error_log: Option<PathBuf>,
+        /// Test configuration and exit
+        #[arg(short, long)]
+        test: bool,
+        /// Enable upgrade mode for zero-downtime updates
+        #[arg(short, long)]
+        upgrade: bool,
     },
     /// Generate example configuration files
     Config {
@@ -51,8 +66,15 @@ fn main() -> Result<(), String> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Run { config } => {
-            run_puerta(config)?;
+        Commands::Run { 
+            config, 
+            daemon, 
+            pid_file, 
+            error_log, 
+            test, 
+            upgrade 
+        } => {
+            run_puerta(config, daemon, pid_file, error_log, test, upgrade)?;
         }
         Commands::Config { mode, output } => {
             generate_config(mode, output)?;
@@ -68,7 +90,14 @@ fn main() -> Result<(), String> {
     Ok(())
 }
 
-fn run_puerta(config_path: PathBuf) -> Result<(), String> {
+fn run_puerta(
+    config_path: PathBuf, 
+    daemon: bool, 
+    pid_file: PathBuf, 
+    error_log: Option<PathBuf>, 
+    test: bool, 
+    upgrade: bool
+) -> Result<(), String> {
     // Load configuration
     let config = Config::load_from_file(&config_path)
         .map_err(|e| format!("Failed to load config from {:?}: {}", config_path, e))?;
@@ -112,10 +141,18 @@ fn run_puerta(config_path: PathBuf) -> Result<(), String> {
     // Create and initialize Puerta with Pingora
     let mut puerta = Puerta::new(puerta_config);
 
-    // Initialize Pingora server with default options
-    let pingora_opt = Opt::default();
+    // Initialize Pingora server with daemon options
+    let pingora_opt = Opt {
+        daemon,
+        upgrade,
+        test,
+        nocapture: false,
+        conf: None,
+    };
+
+    // Initialize Puerta with daemon-aware configuration
     puerta
-        .initialize(Some(pingora_opt))
+        .initialize(Some(pingora_opt), pid_file, error_log)
         .map_err(|e| format!("Failed to initialize Puerta: {}", e))?;
 
     info!("Puerta initialized with Pingora framework, starting server...");
