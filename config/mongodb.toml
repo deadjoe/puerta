@@ -9,11 +9,12 @@ worker_threads = 4  # Optional: defaults to number of CPU cores
 
 # Optional daemon mode configuration
 # [server.daemon]
-# enabled = true                    # Set to true to run as daemon
-# pid_file = "/var/run/puerta.pid"  # PID file path
+# enabled = true                           # Set to true to run as daemon
+# pid_file = "/var/run/puerta.pid"         # PID file path
 # error_log = "/var/log/puerta/error.log"  # Error log file
-# user = "puerta"                   # User to run as (optional)
-# group = "puerta"                  # Group to run as (optional)
+# upgrade_sock = "/var/run/puerta_upgrade.sock"  # Upgrade socket path
+# user = "puerta"                          # User to run as (optional)
+# group = "puerta"                         # Group to run as (optional)
 
 [proxy]
 mode = "mongodb"

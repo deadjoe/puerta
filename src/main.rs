@@ -42,6 +42,9 @@ enum Commands {
         /// Enable upgrade mode for zero-downtime updates
         #[arg(short, long)]
         upgrade: bool,
+        /// Upgrade socket path for zero-downtime updates
+        #[arg(long, default_value = "/tmp/puerta_upgrade.sock")]
+        upgrade_sock: PathBuf,
     },
     /// Generate example configuration files
     Config {
@@ -72,9 +75,10 @@ fn main() -> Result<(), String> {
             pid_file, 
             error_log, 
             test, 
-            upgrade 
+            upgrade,
+            upgrade_sock
         } => {
-            run_puerta(config, daemon, pid_file, error_log, test, upgrade)?;
+            run_puerta(config, daemon, pid_file, error_log, test, upgrade, upgrade_sock)?;
         }
         Commands::Config { mode, output } => {
             generate_config(mode, output)?;
@@ -96,7 +100,8 @@ fn run_puerta(
     pid_file: PathBuf, 
     error_log: Option<PathBuf>, 
     test: bool, 
-    upgrade: bool
+    upgrade: bool,
+    upgrade_sock: PathBuf
 ) -> Result<(), String> {
     // Load configuration
     let config = Config::load_from_file(&config_path)
@@ -152,7 +157,7 @@ fn run_puerta(
 
     // Initialize Puerta with daemon-aware configuration
     puerta
-        .initialize(Some(pingora_opt), pid_file, error_log)
+        .initialize(Some(pingora_opt), pid_file, error_log, upgrade_sock)
         .map_err(|e| format!("Failed to initialize Puerta: {}", e))?;
 
     info!("Puerta initialized with Pingora framework, starting server...");

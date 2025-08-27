@@ -82,11 +82,12 @@ worker_threads = 4
 
 # Optional daemon mode configuration
 [server.daemon]
-enabled = true                    # Enable daemon mode
-pid_file = "/var/run/puerta.pid"  # PID file path
+enabled = true                           # Enable daemon mode
+pid_file = "/var/run/puerta.pid"         # PID file path
 error_log = "/var/log/puerta/error.log"  # Error log file
-user = "puerta"                   # User to run as (optional)
-group = "puerta"                  # Group to run as (optional)
+upgrade_sock = "/var/run/puerta_upgrade.sock"  # Upgrade socket path
+user = "puerta"                          # User to run as (optional)
+group = "puerta"                         # Group to run as (optional)
 
 [proxy]
 mode = "mongodb"
@@ -160,10 +161,34 @@ RUST_LOG=debug ./target/release/puerta run --config config/mongodb.toml
 
 # Test configuration without starting
 ./target/release/puerta run --config config/mongodb.toml --test
-
-# Enable upgrade mode for zero-downtime updates
-./target/release/puerta run --config config/mongodb.toml --upgrade
 ```
+
+#### Zero-Downtime Upgrades
+
+Puerta supports seamless zero-downtime upgrades using Pingora's graceful upgrade mechanism:
+
+```bash
+# Current setup: puerta daemon running in background
+./target/release/puerta run --config config/mongodb.toml --daemon
+
+# Upgrade process (no connection loss):
+# Step 1: Start new version with --upgrade flag
+./target/release/puerta_new run --config config/mongodb.toml --upgrade
+
+# Step 2: Signal old instance to transfer listening sockets
+kill -QUIT $(cat /tmp/puerta.pid)
+
+# Advanced: Custom upgrade socket path
+./target/release/puerta run --config config/mongodb.toml \
+    --upgrade \
+    --upgrade-sock /var/run/puerta_upgrade.sock
+```
+
+**Zero-Downtime Upgrade Guarantees:**
+- ✅ No connection refused errors during upgrade
+- ✅ All in-flight requests complete successfully  
+- ✅ New connections handled by new instance immediately
+- ✅ Session affinity maintained across upgrade
 
 #### Command Line Options
 
@@ -172,12 +197,13 @@ RUST_LOG=debug ./target/release/puerta run --config config/mongodb.toml
 ./target/release/puerta run --help
 
 # Available options:
-#   -c, --config <CONFIG>        Path to configuration file
-#   -d, --daemon                 Run as daemon process in the background
-#   -p, --pid-file <PID_FILE>    PID file path for daemon mode
-#   -e, --error-log <ERROR_LOG>  Error log file path for daemon mode
-#   -t, --test                   Test configuration and exit
-#   -u, --upgrade                Enable upgrade mode for zero-downtime updates
+#   -c, --config <CONFIG>              Path to configuration file
+#   -d, --daemon                       Run as daemon process in the background
+#   -p, --pid-file <PID_FILE>          PID file path for daemon mode
+#   -e, --error-log <ERROR_LOG>        Error log file path for daemon mode
+#   -t, --test                         Test configuration and exit
+#   -u, --upgrade                      Enable upgrade mode for zero-downtime updates
+#       --upgrade-sock <UPGRADE_SOCK>  Upgrade socket path for zero-downtime updates
 ```
 
 ### Testing

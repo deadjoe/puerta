@@ -41,6 +41,8 @@ pub struct DaemonConfig {
     pub pid_file: Option<String>,
     /// Error log file path for daemon mode
     pub error_log: Option<String>,
+    /// Upgrade socket path for zero-downtime updates
+    pub upgrade_sock: Option<String>,
     /// User to run as (for privilege dropping)
     pub user: Option<String>,
     /// Group to run as (for privilege dropping)

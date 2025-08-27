@@ -377,7 +377,8 @@ impl Puerta {
         &mut self, 
         opt: Option<Opt>, 
         pid_file: std::path::PathBuf, 
-        error_log: Option<std::path::PathBuf>
+        error_log: Option<std::path::PathBuf>,
+        upgrade_sock: std::path::PathBuf
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         // Create server configuration if daemon mode is enabled
         let server = if let Some(opt) = opt {
@@ -386,6 +387,7 @@ impl Puerta {
                 let mut server_conf = pingora_core::server::configuration::ServerConf::default();
                 server_conf.daemon = true;
                 server_conf.pid_file = pid_file.to_string_lossy().to_string();
+                server_conf.upgrade_sock = upgrade_sock.to_string_lossy().to_string();
                 if let Some(log_path) = error_log {
                     server_conf.error_log = Some(log_path.to_string_lossy().to_string());
                 }
