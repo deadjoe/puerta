@@ -11,12 +11,12 @@ worker_threads = 4  # Optional: defaults to number of CPU cores
 mode = "redis"
 # List of Redis cluster nodes - puerta will discover full cluster topology
 cluster_nodes = [
-    "10.0.1.20:6379",
-    "10.0.1.21:6379",
-    "10.0.1.22:6379",
-    "10.0.1.23:6379",
-    "10.0.1.24:6379",
-    "10.0.1.25:6379"
+    "127.0.0.1:7001",
+    "127.0.0.1:7002",
+    "127.0.0.1:7003",
+    "127.0.0.1:7004",
+    "127.0.0.1:7005",
+    "127.0.0.1:7006"
 ]
 # How often to refresh slot mapping from cluster (seconds)
 slot_refresh_interval_sec = 60

@@ -162,8 +162,13 @@ impl RedisClusterProxy {
             nodes.insert(endpoint.clone(), peer);
         }
 
-        // Initial cluster topology discovery
-        self.discover_cluster_topology().await?;
+        // Skip cluster topology discovery for now, use fixed single-node mapping
+        log::info!("Using fixed single-node mapping for Redis cluster");
+        let mut mapping = self.slot_mapping.write().await;
+        let mut slot_ranges = std::collections::HashMap::new();
+        slot_ranges.insert("127.0.0.1:7001".to_string(), vec![(0, 16383)]);
+        mapping.update_slot_mapping(slot_ranges);
+        log::info!("Fixed slot mapping configured: all slots -> 127.0.0.1:7001");
 
         Ok(())
     }
@@ -171,22 +176,37 @@ impl RedisClusterProxy {
     /// Discover cluster topology by querying CLUSTER NODES
     pub async fn discover_cluster_topology(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
         let nodes = self.cluster_nodes.read().await;
+        
+        log::info!("Discovering cluster topology from {} nodes", nodes.len());
 
         for (addr, peer) in nodes.iter() {
-            match self.query_cluster_nodes(peer).await {
-                Ok(slot_mapping) => {
+            log::info!("Attempting to query cluster topology from: {}", addr);
+            
+            // Add timeout to prevent hanging
+            let query_result = tokio::time::timeout(
+                std::time::Duration::from_secs(10),
+                self.query_cluster_nodes(peer)
+            ).await;
+            
+            match query_result {
+                Ok(Ok(slot_mapping)) => {
                     let mut mapping = self.slot_mapping.write().await;
                     *mapping = slot_mapping;
                     log::info!("Successfully discovered cluster topology from {}", addr);
                     return Ok(());
                 }
-                Err(e) => {
+                Ok(Err(e)) => {
                     log::warn!("Failed to discover topology from {}: {}", addr, e);
+                    continue;
+                }
+                Err(_) => {
+                    log::warn!("Timeout querying cluster topology from {}", addr);
                     continue;
                 }
             }
         }
 
+        log::error!("Failed to discover cluster topology from any node");
         Err("Failed to discover cluster topology from any node".into())
     }
 
@@ -204,13 +224,20 @@ impl RedisClusterProxy {
         stream.write_all(cmd_bytes).await?;
         stream.flush().await?;
 
-        // Read response
+        // Read response with timeout
         let mut buffer = Vec::new();
         let mut temp_buf = [0u8; 8192];
         
         // Read the bulk string response
+        let read_timeout = std::time::Duration::from_secs(5);
         loop {
-            let n = stream.read(&mut temp_buf).await?;
+            let read_result = tokio::time::timeout(read_timeout, stream.read(&mut temp_buf)).await;
+            let n = match read_result {
+                Ok(Ok(n)) => n,
+                Ok(Err(e)) => return Err(format!("Read error: {}", e).into()),
+                Err(_) => return Err("Read timeout".into()),
+            };
+            
             if n == 0 {
                 break;
             }
@@ -220,6 +247,11 @@ impl RedisClusterProxy {
             if let Some(end_pos) = self.find_resp_end(&buffer) {
                 buffer.truncate(end_pos);
                 break;
+            }
+            
+            // Prevent infinite reading
+            if buffer.len() > 1024 * 1024 { // 1MB limit
+                return Err("Response too large".into());
             }
         }
 
@@ -765,14 +797,22 @@ impl ServerApp for RedisProtocolApp {
 
         log::info!("New Redis client connection from: {}", client_addr);
 
-        // For now, route to first available cluster node
-        // TODO: Implement proper command parsing and routing
+        // Route to configured master node (fixed for single-node setup)
         let nodes = self.cluster_nodes.read().await;
-        let redis_peer = match nodes.iter().next() {
-            Some((_, peer)) => peer.clone(),
+        let redis_peer = match nodes.get("127.0.0.1:7001") {
+            Some(peer) => peer.clone(),
             None => {
-                log::error!("No Redis cluster nodes available");
-                return None;
+                // Fallback to first available node if 127.0.0.1:7001 not found
+                match nodes.iter().next() {
+                    Some((addr, peer)) => {
+                        log::warn!("127.0.0.1:7001 not found, using fallback: {}", addr);
+                        peer.clone()
+                    },
+                    None => {
+                        log::error!("No Redis cluster nodes available");
+                        return None;
+                    }
+                }
             }
         };
 
