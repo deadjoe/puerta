@@ -37,8 +37,8 @@ cd tests
 ./test.sh redis quick     # Redis 快速测试
 ./test.sh redis full      # Redis 综合测试
 
-# 所有测试
-./test.sh all             # 运行所有测试
+# 注意：由于 Puerta 在任何时刻只能运行一种模式（MongoDB 或 Redis），
+# 需要根据当前运行的模式选择相应的测试
 ```
 
 ### 直接运行测试脚本
@@ -101,7 +101,6 @@ cd tests
 # 全面的功能和性能测试
 ./test.sh mongo full    # MongoDB 综合测试
 ./test.sh redis full    # Redis 综合测试
-./test.sh all           # 所有测试
 ```
 
 ## 测试配置
