@@ -208,14 +208,38 @@ kill -QUIT $(cat /tmp/puerta.pid)
 
 ### Testing
 
+#### Unit and Integration Tests
 ```bash
-# Run all tests
+# Run all unit tests
 cargo test
 
 # Run tests with coverage
 cargo install cargo-tarpaulin
 cargo tarpaulin --out Html
 ```
+
+#### End-to-End Load Balancer Tests
+Comprehensive test suite for MongoDB and Redis cluster load balancing:
+
+```bash
+# Navigate to tests directory
+cd tests
+
+# MongoDB Tests
+./test.sh mongo basic     # Basic MongoDB functionality (~15s)
+./test.sh mongo quick     # Quick MongoDB verification (~30s)
+./test.sh mongo full      # Comprehensive MongoDB test suite (~2-3min)
+
+# Redis Tests
+./test.sh redis basic     # Basic Redis functionality (~15s)
+./test.sh redis quick     # Quick Redis verification (~30s)
+./test.sh redis full      # Comprehensive Redis test suite (~2-3min)
+
+# All Tests
+./test.sh all             # Run complete test suite
+```
+
+For detailed test documentation, see [tests/README.md](tests/README.md).
 
 ### Benchmarking
 
