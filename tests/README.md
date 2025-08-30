@@ -1,182 +1,221 @@
-# Puerta 测试套件
+# Puerta Test Suite
 
-本目录包含 Puerta 负载均衡器的完整测试套件，支持 MongoDB 和 Redis 集群的负载均衡测试。
+This directory contains the comprehensive test suite for the Puerta load balancer, supporting both MongoDB Sharded Cluster and Redis Cluster load balancing validation.
 
-## 目录结构
+## Directory Structure
 
 ```
 tests/
-├── mongodb/              # MongoDB 负载均衡器测试
-│   ├── README.md        # MongoDB 测试文档
-│   ├── test_mongodb_lb_basic.sh       # 基础功能测试
-│   ├── test_mongodb_lb_quick.sh       # 快速验证测试
-│   └── test_mongodb_lb_comprehensive.sh # 综合测试套件
-├── redis/               # Redis 集群负载均衡器测试
-│   ├── README.md        # Redis 测试文档
-│   ├── test_redis_lb_basic.sh         # 基础功能测试
-│   ├── test_redis_lb_quick.sh         # 快速验证测试
-│   └── test_redis_lb_comprehensive.sh # 综合测试套件
-└── test.sh              # 统一测试运行器
+├── mongodb/                         # MongoDB load balancer tests
+│   ├── README.md                   # MongoDB test documentation
+│   ├── test_mongodb_lb_basic.sh           # Basic functionality test
+│   ├── test_mongodb_lb_quick.sh           # Quick verification test
+│   └── test_mongodb_lb_comprehensive.sh   # Comprehensive test suite
+├── redis/                          # Redis cluster load balancer tests
+│   ├── README.md                   # Redis test documentation
+│   ├── test_redis_lb_basic.sh             # Basic functionality test
+│   ├── test_redis_lb_quick.sh             # Quick verification test
+│   ├── test_redis_lb_comprehensive.sh     # Comprehensive test suite
+│   └── test_redis_routing_logic.sh        # Slot routing logic validation
+└── test.sh                         # Unified test runner
 ```
 
-## 快速开始
+## Quick Start
 
-### 使用便捷测试脚本
+### Using the Convenient Test Runner
+
 ```bash
-# 从 tests 目录运行
+# Run from the tests directory
 cd tests
 ./test.sh <database> <test_type>
 
-# MongoDB 测试
-./test.sh mongo basic     # MongoDB 基础测试
-./test.sh mongo quick     # MongoDB 快速测试  
-./test.sh mongo full      # MongoDB 综合测试
+# MongoDB Tests
+./test.sh mongo basic     # MongoDB basic functionality test
+./test.sh mongo quick     # MongoDB quick verification test  
+./test.sh mongo full      # MongoDB comprehensive test suite
 
-# Redis 测试
-./test.sh redis basic     # Redis 基础测试
-./test.sh redis quick     # Redis 快速测试
-./test.sh redis full      # Redis 综合测试
-./test.sh redis routing   # Redis 路由逻辑验证
+# Redis Tests
+./test.sh redis basic     # Redis basic functionality test
+./test.sh redis quick     # Redis quick verification test
+./test.sh redis full      # Redis comprehensive test suite
+./test.sh redis routing   # Redis slot routing logic validation
 
-# 注意：由于 Puerta 在任何时刻只能运行一种模式（MongoDB 或 Redis），
-# 需要根据当前运行的模式选择相应的测试
+# Note: Puerta operates in single mode (MongoDB OR Redis) at any given time.
+# Choose tests based on the currently running mode.
 ```
 
-### 直接运行测试脚本
-```bash
-# MongoDB 测试
-./tests/mongodb/test_mongodb_lb_basic.sh       # 基础功能测试 (~15秒)
-./tests/mongodb/test_mongodb_lb_quick.sh       # 快速验证测试 (~30秒)
-./tests/mongodb/test_mongodb_lb_comprehensive.sh # 综合测试套件 (~2-3分钟)
+### Running Tests Directly
 
-# Redis 测试
-./tests/redis/test_redis_lb_basic.sh           # 基础功能测试 (~15秒)
-./tests/redis/test_redis_lb_quick.sh           # 快速验证测试 (~30秒)
-./tests/redis/test_redis_lb_comprehensive.sh   # 综合测试套件 (~2-3分钟)
-./tests/redis/test_redis_routing_logic.sh      # 路由逻辑验证 (~10秒)
+```bash
+# MongoDB Tests
+./tests/mongodb/test_mongodb_lb_basic.sh           # Basic functionality test (~15s)
+./tests/mongodb/test_mongodb_lb_quick.sh           # Quick verification test (~30s)
+./tests/mongodb/test_mongodb_lb_comprehensive.sh   # Comprehensive test suite (~2-3min)
+
+# Redis Tests
+./tests/redis/test_redis_lb_basic.sh               # Basic functionality test (~15s)
+./tests/redis/test_redis_lb_quick.sh               # Quick verification test (~30s)
+./tests/redis/test_redis_lb_comprehensive.sh       # Comprehensive test suite (~2-3min)
+./tests/redis/test_redis_routing_logic.sh          # Slot routing logic validation (~10s)
 ```
 
-## 测试类型
+## Test Types
 
-### MongoDB 测试套件
-验证 MongoDB 负载均衡器的功能：
-- 基本连通性和路由验证
-- 会话亲和性 (Session Affinity) 测试
-- 负载均衡效率测试
-- 并发连接处理
-- 数据库操作验证
-- 性能基准测试
-- 错误处理和恢复能力
+### MongoDB Test Suite
+Validates MongoDB load balancer functionality:
+- Basic connectivity and routing verification
+- Session affinity testing
+- Load balancing efficiency validation
+- Concurrent connection handling
+- Database operation verification
+- Performance benchmarking
+- Error handling and recovery capabilities
 
-### Redis 测试套件
-验证 Redis 集群负载均衡器的功能：
-- 基本连通性和 RESP 协议支持
-- Slot 路由和 Hash Tag 功能
-- CRC16 槽位计算验证
-- Redis 集群拓扑感知
-- 多种 Redis 数据类型支持
-- 并发连接和性能测试
-- MOVED/ASK 重定向处理
-- 路由一致性验证
-- 错误处理和连接弹性
+### Redis Test Suite
+Validates Redis cluster load balancer functionality:
+- Basic connectivity and RESP protocol support
+- Slot-based routing and hash tag functionality
+- CRC16 slot calculation verification
+- Redis cluster topology awareness
+- Multiple Redis data type support
+- Concurrent connection and performance testing
+- MOVED/ASK redirection handling
+- Routing consistency validation
+- Connection resilience and error handling
 
-## 使用建议
+## Usage Recommendations
 
-### 开发阶段
+### Development Phase
 ```bash
-# MongoDB 快速验证
+# MongoDB quick validation
 ./test.sh mongo basic
 
-# Redis 快速验证  
+# Redis quick validation  
 ./test.sh redis basic
 
-# Redis 路由逻辑验证
+# Redis routing logic validation (recommended for development)
 ./test.sh redis routing
 ```
 
-### 提交前验证
+### Pre-commit Validation
 ```bash
-# MongoDB 功能验证
+# MongoDB functionality verification
 ./test.sh mongo quick
 
-# Redis 功能验证
+# Redis functionality verification
 ./test.sh redis quick
 ```
 
-### 部署前验证
+### Pre-deployment Validation
 ```bash
-# 全面的功能和性能测试
-./test.sh mongo full    # MongoDB 综合测试
-./test.sh redis full    # Redis 综合测试
+# Comprehensive functionality and performance testing
+./test.sh mongo full    # MongoDB comprehensive test
+./test.sh redis full    # Redis comprehensive test
 ```
 
-## 测试配置
+## Test Configuration
 
-### MongoDB 测试配置
+### MongoDB Test Configuration
 ```bash
-# 负载均衡器配置
+# Load balancer configuration
 LOAD_BALANCER_HOST="127.0.0.1"
 LOAD_BALANCER_PORT="27016"
 BACKEND_ROUTERS=("127.0.0.1:27017" "127.0.0.1:27018" "127.0.0.1:27019")
 ```
 
-### Redis 测试配置
+### Redis Test Configuration
 ```bash
-# 负载均衡器配置
+# Load balancer configuration
 LOAD_BALANCER_HOST="127.0.0.1"
 LOAD_BALANCER_PORT="6379"
 REDIS_NODES=("127.0.0.1:7001" "127.0.0.1:7002" "127.0.0.1:7003" "127.0.0.1:7004" "127.0.0.1:7005" "127.0.0.1:7006")
 ```
 
-## 添加新测试
+## Adding New Tests
 
-1. 在相应子目录创建测试脚本
-2. 遵循现有的命名约定：`test_<component>_<type>.sh`
-3. 添加适当的文档和注释
-4. 更新相关 README 文件
+1. Create test scripts in the appropriate subdirectory
+2. Follow existing naming convention: `test_<component>_<type>.sh`
+3. Add appropriate documentation and comments
+4. Update relevant README files
+5. Ensure tests are executable: `chmod +x your_test.sh`
 
-## 输出文件
+## Output Files
 
-测试过程中会生成以下文件：
-- 控制台实时输出
-- 详细日志文件 (`/tmp/puerta_test_*.log`)
-- JSON格式报告文件 (`/tmp/puerta_test_report_*.json`)
+Tests generate the following output files:
+- Real-time console output
+- Detailed log files (`/tmp/puerta_test_*.log`)
+- JSON format reports (`/tmp/puerta_test_report_*.json`)
 
-## 前置条件
+## Prerequisites
 
-### MongoDB 测试前置条件
-- MongoDB Sharded Cluster 正在运行
-- Puerta 负载均衡器已启动 (MongoDB mode, 端口 27016)
-- 已安装 `mongosh` MongoDB Shell
-- 已安装 `bc` 计算器工具
+### MongoDB Test Prerequisites
+- MongoDB Sharded Cluster running and accessible
+- Puerta load balancer started in MongoDB mode (port 27016)
+- `mongosh` MongoDB Shell installed
+- `bc` calculator tool installed
 
-### Redis 测试前置条件  
-- Redis Cluster 正在运行 (端口 7001-7006)
-- Puerta 负载均衡器已启动 (Redis mode, 端口 6379)
-- 已安装 `redis-cli` Redis 命令行工具
-- 已安装 `bc` 计算器工具
+### Redis Test Prerequisites  
+- Redis Cluster nodes running (ports 7001-7006) or single Redis instance
+- Puerta load balancer started in Redis mode (port 6379)
+- `redis-cli` Redis command-line tool installed
+- `bc` calculator tool installed
 
-## 性能指标参考
+## Performance Metrics Reference
 
-### MongoDB 测试
-- 基础测试：~15秒
-- 快速测试：~30秒  
-- 综合测试：~2-3分钟
-- 期望性能：50-100 ops/sec
+### MongoDB Tests
+- Basic test: ~15 seconds
+- Quick test: ~30 seconds  
+- Comprehensive test: ~2-3 minutes
+- Expected performance: 50-100 operations/second
 
-### Redis 测试
-- 基础测试：~15秒
-- 快速测试：~30秒
-- 综合测试：~2-3分钟
-- 路由逻辑验证：~10秒
-- 期望性能：100-150 ops/sec
-- 压力测试：30秒内处理4000+操作
-- 槽位计算性能：~200 ops/sec
+### Redis Tests
+- Basic test: ~15 seconds
+- Quick test: ~30 seconds
+- Comprehensive test: ~2-3 minutes
+- Routing logic validation: ~10 seconds
+- Expected performance: 100-150 operations/second
+- Stress test capability: 4000+ operations in 30 seconds
+- Slot calculation performance: ~200 calculations/second
 
-## 故障排除
+## Troubleshooting
 
-如遇问题请查看：
-1. 各测试套件的详细 README 文件 (`tests/mongodb/README.md`, `tests/redis/README.md`)
-2. 测试日志文件中的错误信息 (`/tmp/puerta_*_test_*.log`)
-3. 确认所有前置条件已满足
-4. 验证相应的后端数据库集群状态
+If you encounter issues, please check:
+
+1. **Test-specific documentation**: Refer to detailed README files in each test subdirectory (`tests/mongodb/README.md`, `tests/redis/README.md`)
+2. **Test log files**: Check error information in test logs (`/tmp/puerta_*_test_*.log`)
+3. **Prerequisites**: Ensure all prerequisites are met
+4. **Backend cluster status**: Verify the respective backend database cluster is running and accessible
+5. **Puerta configuration**: Confirm Puerta is running in the correct mode with proper configuration
+6. **Network connectivity**: Ensure network connectivity between Puerta and backend services
+
+## Test Development Guidelines
+
+### Writing New Tests
+- Use clear, descriptive test names
+- Include setup and cleanup procedures
+- Add comprehensive error handling
+- Document expected behavior and edge cases
+- Follow the existing code style and patterns
+
+### Test Best Practices
+- Test one feature per script when possible
+- Include both positive and negative test cases
+- Add timeout mechanisms for long-running operations
+- Generate meaningful log output for debugging
+- Clean up test data after completion
+
+## Integration with CI/CD
+
+These tests are designed for integration with continuous integration pipelines:
+
+```bash
+# Example CI pipeline integration
+./test.sh mongo basic && ./test.sh redis routing
+```
+
+For comprehensive validation in production environments:
+
+```bash
+# Full validation suite
+./test.sh mongo full && ./test.sh redis full
+```
