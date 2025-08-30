@@ -234,9 +234,10 @@ cd tests
 ./test.sh redis basic     # Basic Redis functionality (~15s)
 ./test.sh redis quick     # Quick Redis verification (~30s)
 ./test.sh redis full      # Comprehensive Redis test suite (~2-3min)
+./test.sh redis routing   # Redis slot routing logic validation (~10s)
 
-# All Tests
-./test.sh all             # Run complete test suite
+# Note: Puerta runs in single mode (MongoDB OR Redis) at any given time
+# Choose tests based on currently running mode
 ```
 
 For detailed test documentation, see [tests/README.md](tests/README.md).

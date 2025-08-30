@@ -162,15 +162,21 @@ impl RedisClusterProxy {
             nodes.insert(endpoint.clone(), peer);
         }
 
-        // Skip cluster topology discovery for now, use fixed single-node mapping
-        log::info!("Using fixed single-node mapping for Redis cluster");
+        // Skip cluster topology discovery for now - configure fallback mapping directly
+        log::info!("Setting up Redis cluster with fallback configuration");
+        self.setup_fallback_mapping().await;
+
+        Ok(())
+    }
+
+    /// Setup fallback mapping for single node
+    async fn setup_fallback_mapping(&self) {
+        log::warn!("Setting up fallback single-node mapping");
         let mut mapping = self.slot_mapping.write().await;
         let mut slot_ranges = std::collections::HashMap::new();
         slot_ranges.insert("127.0.0.1:7001".to_string(), vec![(0, 16383)]);
         mapping.update_slot_mapping(slot_ranges);
-        log::info!("Fixed slot mapping configured: all slots -> 127.0.0.1:7001");
-
-        Ok(())
+        log::info!("Fallback mapping configured: all slots (0-16383) -> 127.0.0.1:7001");
     }
 
     /// Discover cluster topology by querying CLUSTER NODES
@@ -217,7 +223,14 @@ impl RedisClusterProxy {
     ) -> Result<SlotMapping, Box<dyn Error + Send + Sync>> {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
         
-        let mut stream = self.connector.new_stream(peer).await?;
+        // Add timeout for connection establishment
+        let connect_timeout = std::time::Duration::from_secs(3);
+        let mut stream = tokio::time::timeout(
+            connect_timeout,
+            self.connector.new_stream(peer)
+        ).await
+            .map_err(|_| "Connection timeout")?
+            .map_err(|e| format!("Connection failed: {}", e))?;
 
         // Send CLUSTER NODES command in RESP format
         let cmd_bytes = b"*2\r\n$7\r\nCLUSTER\r\n$5\r\nNODES\r\n";

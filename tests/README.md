@@ -36,6 +36,7 @@ cd tests
 ./test.sh redis basic     # Redis 基础测试
 ./test.sh redis quick     # Redis 快速测试
 ./test.sh redis full      # Redis 综合测试
+./test.sh redis routing   # Redis 路由逻辑验证
 
 # 注意：由于 Puerta 在任何时刻只能运行一种模式（MongoDB 或 Redis），
 # 需要根据当前运行的模式选择相应的测试
@@ -52,6 +53,7 @@ cd tests
 ./tests/redis/test_redis_lb_basic.sh           # 基础功能测试 (~15秒)
 ./tests/redis/test_redis_lb_quick.sh           # 快速验证测试 (~30秒)
 ./tests/redis/test_redis_lb_comprehensive.sh   # 综合测试套件 (~2-3分钟)
+./tests/redis/test_redis_routing_logic.sh      # 路由逻辑验证 (~10秒)
 ```
 
 ## 测试类型
@@ -70,10 +72,12 @@ cd tests
 验证 Redis 集群负载均衡器的功能：
 - 基本连通性和 RESP 协议支持
 - Slot 路由和 Hash Tag 功能
+- CRC16 槽位计算验证
 - Redis 集群拓扑感知
 - 多种 Redis 数据类型支持
 - 并发连接和性能测试
 - MOVED/ASK 重定向处理
+- 路由一致性验证
 - 错误处理和连接弹性
 
 ## 使用建议
@@ -85,6 +89,9 @@ cd tests
 
 # Redis 快速验证  
 ./test.sh redis basic
+
+# Redis 路由逻辑验证
+./test.sh redis routing
 ```
 
 ### 提交前验证
@@ -160,9 +167,11 @@ REDIS_NODES=("127.0.0.1:7001" "127.0.0.1:7002" "127.0.0.1:7003" "127.0.0.1:7004"
 ### Redis 测试
 - 基础测试：~15秒
 - 快速测试：~30秒
-- 综合测试：~2-3分钟 
+- 综合测试：~2-3分钟
+- 路由逻辑验证：~10秒
 - 期望性能：100-150 ops/sec
 - 压力测试：30秒内处理4000+操作
+- 槽位计算性能：~200 ops/sec
 
 ## 故障排除
 

@@ -53,9 +53,13 @@ case "$DATABASE" in
                 echo "Running Redis comprehensive test..."
                 ./redis/test_redis_lb_comprehensive.sh
                 ;;
+            "routing")
+                echo "Running Redis routing logic validation..."
+                ./redis/test_redis_routing_logic.sh
+                ;;
             *)
                 echo "❌ Invalid Redis test type: $TEST_TYPE"
-                echo "Valid options: basic, quick, full"
+                echo "Valid options: basic, quick, full, routing"
                 exit 1
                 ;;
         esac
@@ -70,8 +74,9 @@ case "$DATABASE" in
         echo ""
         echo "Test Types:"
         echo "  basic           Basic functionality test (~15s)"
-        echo "  quick           Quick verification test (~30s)"
+        echo "  quick           Quick verification test (~30s)"  
         echo "  full            Comprehensive test suite (~2-3min)"
+        echo "  routing         Slot routing logic validation (~10s)"
         echo ""
         echo "Examples:"
         echo "  $0 mongo basic     # MongoDB basic test"
@@ -80,5 +85,6 @@ case "$DATABASE" in
         echo "  $0 redis quick     # Redis quick test"
         echo "  $0 mongo full      # MongoDB comprehensive test"
         echo "  $0 redis full      # Redis comprehensive test"
+        echo "  $0 redis routing   # Redis routing validation"
         ;;
 esac
